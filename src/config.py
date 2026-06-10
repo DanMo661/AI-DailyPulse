@@ -57,6 +57,10 @@ WECHAT_APP_SECRET = os.environ.get("WECHAT_APP_SECRET", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 RESEND_FROM = os.environ.get("RESEND_FROM", "")
 
+# Feishu bot
+FEISHU_WEBHOOK_URL = os.environ.get("FEISHU_WEBHOOK_URL", "")
+FEISHU_SECRET = os.environ.get("FEISHU_SECRET", "")
+
 # --- Runtime ---
 SEEN_URLS_FILE = DATA_DIR / "seen_urls.json"
 RAW_ARTICLES_FILE = DATA_DIR / "raw_articles.json"

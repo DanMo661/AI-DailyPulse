@@ -9,6 +9,8 @@ from config import (
     WP_URL,
     WP_USER,
     WP_APP_PASSWORD,
+    FEISHU_WEBHOOK_URL,
+    FEISHU_SECRET,
     DIGEST_OUTPUT,
     SOCIAL_OUTPUT,
     OUTPUT_DIR,
@@ -112,6 +114,101 @@ def publish_wordpress(title: str, content: str, status: str = "draft") -> bool:
     return False
 
 
+# ─── Feishu ─────────────────────────────────────────────
+
+def _markdown_to_feishu_text(md: str) -> str:
+    """Convert basic markdown to Feishu-friendly plain text."""
+    import re
+    # remove heading markers, keep text
+    md = re.sub(r'^#+\s*', '', md, flags=re.MULTILINE)
+    # bold: **text** -> 【text】
+    md = re.sub(r'\*\*(.+?)\*\*', r'【\1】', md)
+    # italic: *text* -> text
+    md = re.sub(r'\*(.+?)\*', r'\1', md)
+    # inline code: `text` -> text
+    md = re.sub(r'`(.+?)`', r'\1', md)
+    # horizontal rules
+    md = re.sub(r'^---+\s*$', '―' * 20, md, flags=re.MULTILINE)
+    # links: [text](url) -> text (url)
+    md = re.sub(r'\[(.+?)\]\((.+?)\)', r'\1 (\2)', md)
+    return md
+
+
+def publish_feishu(digest: str, posts_map: dict = None) -> bool:
+    """Send daily digest and social media posts to Feishu via bot webhook."""
+    if not FEISHU_WEBHOOK_URL:
+        print("[publish] Feishu not configured, skip")
+        return False
+
+    # split digest into the overview section and the detail section
+    parts = digest.split("---\n", 2)
+    overview = parts[0] if len(parts) > 0 else ""
+    detail = parts[2] if len(parts) > 2 else ""
+
+    overview_text = _markdown_to_feishu_text(overview)
+
+    success_count = 0
+
+    def _send(text: str) -> bool:
+        body = {
+            "timestamp": "",
+            "sign": "",
+            "msg_type": "text",
+            "content": {"text": text},
+        }
+        if FEISHU_SECRET:
+            import hmac
+            import hashlib
+            import base64
+            ts = str(int(datetime.now().timestamp()))
+            sign_str = f"{ts}\n{FEISHU_SECRET}"
+            h = hmac.new(FEISHU_SECRET.encode(), sign_str.encode(), hashlib.sha256)
+            body["timestamp"] = ts
+            body["sign"] = base64.b64encode(h.digest()).decode()
+
+        resp = requests.post(FEISHU_WEBHOOK_URL, json=body, timeout=15)
+        return resp.json().get("code") == 0
+
+    try:
+        # message 1: overview
+        if _send(overview_text):
+            success_count += 1
+        else:
+            print("[publish] Feishu overview failed")
+
+        # message 2: full detail
+        if detail.strip():
+            detail_text = _markdown_to_feishu_text(detail.strip())
+            chunks = [detail_text[i:i+25000] for i in range(0, len(detail_text), 25000)]
+            for ci, chunk in enumerate(chunks):
+                suffix = "\n\n... (接下文)" if ci < len(chunks)-1 else ""
+                if _send(chunk + suffix):
+                    success_count += 1
+
+        # messages 3+: social media copy-paste posts
+        if posts_map:
+            for article_id, platforms in posts_map.items():
+                for platform in ("xiaohongshu", "douyin"):
+                    content = platforms.get(platform, "")
+                    if not content:
+                        continue
+                    label = {"xiaohongshu": "小红书", "douyin": "抖音"}[platform]
+                    header = f"――――――――――\n【{label}文案 - 复制发布】\n――――――――――\n\n"
+                    full = header + content
+                    if _send(full):
+                        success_count += 1
+                        print(f"[publish] Feishu {platform} post sent for {article_id[:20]}")
+                    # small delay between messages to keep order
+                    import time
+                    time.sleep(0.3)
+    except Exception as e:
+        print(f"[publish] Feishu failed: {e}")
+        return False
+
+    print(f"[publish] Feishu sent {success_count} messages")
+    return True
+
+
 # ─── File export for manual review ──────────────────────
 
 def save_manual_posts(posts_map: dict):
@@ -156,10 +253,13 @@ def publish_all(digest: str, posts_map: dict):
     """Run all publishing steps."""
     results = {}
 
-    # 1. Telegram - instant push
+    # 1. Feishu - instant push (domestic priority, includes social posts)
+    results["feishu"] = publish_feishu(digest, posts_map)
+
+    # 2. Telegram - instant push
     results["telegram"] = publish_telegram_digest(digest)
 
-    # 2. WordPress - draft (safe, won't auto-publish)
+    # 3. WordPress - draft (safe, won't auto-publish)
     today = datetime.now().strftime("%Y-%m-%d")
     title = f"AI/科技早报 | {today}"
     wp_preview = digest[:3000] + "\n\n...\n\n[完整版见公众号]"

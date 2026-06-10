@@ -28,6 +28,7 @@ class SocialPosts(BaseModel):
     xiaohongshu: str
     zhihu: str
     telegram: str
+    douyin: str
 
 
 def _chat(system: str, user: str, temperature: float = 0.3, max_tokens: int = 2000) -> str:
@@ -148,6 +149,12 @@ STYLE_PROMPTS = {
 📝 一句话要点
 🔗 原文链接
 不超过 200 字。简洁有力。""",
+
+    "douyin": """你是抖音科技博主。将以下内容写成抖音视频口播文案+文案区内容。
+风格: 极度口语化，像跟朋友吃饭时随口聊一个新鲜事。开头3秒必须有钩子（"你绝对想不到..." "刚刚爆出来的..." "这几天AI圈炸了..."）。
+文案区内容 ≤300字，分两段：第一段说事，第二段一句话点评引互动（"你们觉得呢？" "这个方向我看好"）。
+末尾加 3-5 个标签，如 #AI #科技 #干货。
+禁止书面语、禁止长难句、禁止"随着...的发展"。""",
 }
 
 

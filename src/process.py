@@ -238,8 +238,8 @@ def assemble_digest(articles: list[dict], posts_map: dict, overview: str = "") -
     # each article: a flowing paragraph summary
     entries = []
     for it in items:
-        parts_list = [p for p in [it["one_liner"]] + it["key_points"][:1] if p]
-        para = "，".join(parts_list) if parts_list else "暂无摘要"
+        parts_list = [p.rstrip("。").rstrip(".") for p in it["key_points"] if p]
+        para = "。".join(parts_list) + "。" if parts_list else "暂无摘要"
 
         entries.append(
             f"## {it['title_cn']}\n\n"

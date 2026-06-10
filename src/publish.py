@@ -151,8 +151,6 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
 
     def _send(text: str) -> bool:
         body = {
-            "timestamp": "",
-            "sign": "",
             "msg_type": "text",
             "content": {"text": text},
         }
@@ -161,8 +159,9 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
             import hashlib
             import base64
             ts = str(int(datetime.now().timestamp()))
-            sign_str = f"{ts}\n{FEISHU_SECRET}"
-            h = hmac.new(FEISHU_SECRET.encode(), sign_str.encode(), hashlib.sha256)
+            key = FEISHU_SECRET.encode()
+            msg = f"{ts}\n{FEISHU_SECRET}".encode()
+            h = hmac.new(key, msg, hashlib.sha256)
             body["timestamp"] = ts
             body["sign"] = base64.b64encode(h.digest()).decode()
 

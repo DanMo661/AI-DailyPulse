@@ -140,12 +140,13 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
         print("[publish] Feishu not configured, skip")
         return False
 
-    # split digest into the overview section and the detail section
-    parts = digest.split("---\n", 2)
-    overview = parts[0] if len(parts) > 0 else ""
-    detail = parts[2] if len(parts) > 2 else ""
+    # split digest into overview and individual article sections
+    # format: # title\n\noverview\n\n---\n## article1\n...\n---\n## article2\n...
+    parts = digest.split("---\n")
+    overview_raw = parts[0] if len(parts) > 0 else ""
+    article_blocks = parts[1:] if len(parts) > 1 else []
 
-    overview_text = _markdown_to_feishu_text(overview)
+    overview_text = _markdown_to_feishu_text(overview_raw)
 
     success_count = 0
 
@@ -164,7 +165,6 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
             h = hmac.new(key, msg, hashlib.sha256)
             body["timestamp"] = ts
             body["sign"] = base64.b64encode(h.digest()).decode()
-
         resp = requests.post(FEISHU_WEBHOOK_URL, json=body, timeout=15)
         return resp.json().get("code") == 0
 
@@ -172,19 +172,21 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
         # message 1: overview
         if _send(overview_text):
             success_count += 1
-        else:
-            print("[publish] Feishu overview failed")
 
-        # message 2: full detail
-        if detail.strip():
-            detail_text = _markdown_to_feishu_text(detail.strip())
-            chunks = [detail_text[i:i+25000] for i in range(0, len(detail_text), 25000)]
-            for ci, chunk in enumerate(chunks):
-                suffix = "\n\n... (接下文)" if ci < len(chunks)-1 else ""
-                if _send(chunk + suffix):
+        # messages 2+: one message per article
+        for block in article_blocks:
+            block = block.strip()
+            if not block:
+                continue
+            text = _markdown_to_feishu_text(block)
+            chunks = [text[i:i+25000] for i in range(0, len(text), 25000)]
+            for chunk in chunks:
+                if _send(chunk):
                     success_count += 1
+                import time
+                time.sleep(0.3)
 
-        # messages 3+: social media copy-paste posts
+        # messages after: social media copy-paste posts
         if posts_map:
             for article_id, platforms in posts_map.items():
                 for platform in ("xiaohongshu", "douyin"):
@@ -196,8 +198,6 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
                     full = header + content
                     if _send(full):
                         success_count += 1
-                        print(f"[publish] Feishu {platform} post sent for {article_id[:20]}")
-                    # small delay between messages to keep order
                     import time
                     time.sleep(0.3)
     except Exception as e:

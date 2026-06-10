@@ -178,27 +178,44 @@ def generate_social_posts(article: dict) -> dict:
     return posts
 
 
-# ─── Step 4: Assemble Daily Digest ──────────────────────
+# ─── Step 4: Period Overview ────────────────────────────
 
-DIGEST_PROMPT = """你是技术文摘主编。将以下多条技术摘要整合成一份《每日 AI/科技早报》。
+def generate_overview(articles: list[dict]) -> str:
+    """Generate a period overview identifying major/breaking news."""
+    if not articles:
+        return ""
 
-格式要求（Markdown）:
+    summaries = []
+    for a in articles:
+        d = a.get("digest", {})
+        title = d.get("title_cn", a["title"])
+        one = d.get("one_liner", "")
+        if one:
+            summaries.append(f"- {title}：{one}")
+        else:
+            summaries.append(f"- {title}")
 
-# 🤖 AI/科技早报 | {date}
+    summary_text = "\n".join(summaries[:12])
 
-## 今日速览
-{3-5条一句话新闻，每条以 🔹 开头}
+    system = "你是一个科技新闻主编。分析以下近两天的科技新闻，输出一段中文概览（200字以内）。"
+    user = f"""以下是近两天的科技新闻：
 
----
-{每条重点新闻一个二级标题，包含: 中文标题、英文原标题、来源、3个要点、原文链接}
+{summary_text}
 
----
-> 📬 由 AI 自动生成并人工审核。如有错误请联系修正。
+请写一段概览，包含：
+1. 这两天整体发生了什么
+2. 如果有重磅/突破性消息，重点指出来（没有就不写）
 
-风格: 信息密度高，专业但不枯燥。"""
+要求：自然段落，不要列表，不要编号。"""
+
+    result = _chat(system, user, temperature=0.3, max_tokens=500)
+    print(f"[process] overview generated ({len(result)} chars)")
+    return result
 
 
-def assemble_digest(articles: list[dict], posts_map: dict) -> str:
+# ─── Step 5: Assemble Daily Digest ──────────────────────
+
+def assemble_digest(articles: list[dict], posts_map: dict, overview: str = "") -> str:
     """Assemble all summaries into a daily digest markdown."""
     today = datetime.now().strftime("%Y年%m月%d日")
 
@@ -206,38 +223,35 @@ def assemble_digest(articles: list[dict], posts_map: dict) -> str:
     for a in articles:
         d = a.get("digest", {})
         items.append({
-            "title_en": a["title"],
             "title_cn": d.get("title_cn", a["title"]),
             "source": a["source"],
             "url": a["url"],
-            "key_points": d.get("key_points", []),
             "one_liner": d.get("one_liner", ""),
-            "score": a.get("score", 0),
+            "key_points": d.get("key_points", []),
         })
 
-    # top articles for quick view
-    top_one_liners = "\n".join(
-        f"🔹 {it['one_liner']} — *{it['source']}*"
-        for it in items[:5]
-        if it["one_liner"]
-    )
+    # overview section
+    overview_section = ""
+    if overview:
+        overview_section = f"📋 概览\n{overview}\n\n"
 
-    # full entries
+    # each article: a flowing paragraph summary
     entries = []
     for it in items:
-        points = "\n".join(f"- {p}" for p in it["key_points"])
+        parts_list = [p for p in [it["one_liner"]] + it["key_points"][:1] if p]
+        para = "，".join(parts_list) if parts_list else "暂无摘要"
+
         entries.append(
-            f"## {it['title_cn']}\n"
-            f"*{it['title_en']}* | 来源: {it['source']}\n\n"
-            f"{points}\n\n"
-            f"🔗 [原文链接]({it['url']})\n"
+            f"## {it['title_cn']}\n\n"
+            f"{para}\n\n"
+            f"来源: {it['source']}  |  🔗 [原文链接]({it['url']})\n"
         )
 
     digest = (
         f"# 🤖 AI/科技早报 | {today}\n\n"
-        f"## 今日速览\n{top_one_liners}\n\n---\n\n"
+        f"{overview_section}"
         + "\n---\n".join(entries)
-        + "\n\n> 📬 由 AI 自动生成并人工审核。如有错误请联系修正。\n"
+        + "\n\n> 📬 AI 自动生成\n"
     )
 
     return digest
@@ -271,8 +285,11 @@ def process_all():
             print(f"[process] rewriting {i+1}: {a['digest'].get('title_cn', '')[:40]}")
             posts_map[a["id"]] = generate_social_posts(a)
 
-    # Step 4: assemble digest
-    digest = assemble_digest(articles, posts_map)
+    # Step 4: generate period overview
+    overview = generate_overview(articles)
+
+    # Step 5: assemble digest
+    digest = assemble_digest(articles, posts_map, overview)
     DIGEST_OUTPUT.write_text(digest, encoding="utf-8")
     print(f"[process] digest written to {DIGEST_OUTPUT}")
 

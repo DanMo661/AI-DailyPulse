@@ -94,13 +94,16 @@ SUMMARY_PROMPT = """你是技术内容分析师。用中文总结以下文章。
 
 输出 JSON:
 {
-  "title_cn": "中文标题（翻译+润色，保持原意）",
-  "key_points": ["要点1(≤60字)", "要点2(≤60字)", "要点3(≤60字)"],
-  "one_liner": "一句话概括（≤40字）",
+  "title_cn": "中文标题（翻译+润色，保持原意，≤25字）",
+  "key_points": ["要点1(≤30字)", "要点2(≤30字)"],
+  "one_liner": "一句话概括（≤30字）",
   "relevance_score": 0.0~1.0 的分数（越高越值得分享给国内开发者）
 }
 
 规则:
+- title_cn 必须精炼，像新闻标题，不超过25个字
+- key_points 最多2条，每条不超过30字，只保留最核心信息
+- one_liner 不超过30字
 - 不要添加原文没有的信息
 - 专业术语保留英文原名
 - 涉及数字/数据必须准确"""
@@ -133,28 +136,36 @@ def summarize_article(article: dict) -> dict:
 
 STYLE_PROMPTS = {
     "wechat": """你是微信公众号科技编辑。将以下内容写成公众号推送段落。
-风格: 专业但不生硬，中英术语混用，300-500字。开头吸引人，中间展开要点，结尾引导关注。
+风格: 专业简洁，中英术语混用，200-300字。开头直接说事，不要寒暄。
 用 Markdown 格式，保留原文链接。不要标题（标题单独生成）。""",
 
     "xiaohongshu": """你是小红书科技博主。将以下内容写成小红书文案。
-风格: 口语化中文，像朋友聊天，带 emoji。≤500字。开头用"最近发现..."这类自然引入。
-加 3-5 个相关标签。不要标题党，内容要有干货。""",
 
-    "zhihu": """你是知乎科技领域答主。将以下内容写成知乎回答/文章段落。
-风格: 深度分析视角，有观点有论据，800-1200字。带引用格式标注来源。
-可以补充背景知识帮助理解，但核心技术细节不能编造。""",
+格式（严格执行）:
+- 第1段：用一段话概括讲了什么（≤80字）
+- 然后分点展开，每点用「 | 标题」开头，后跟1句解释
+- 末尾加 3 个标签
 
-    "telegram": """你是 Telegram 科技频道的编辑。将以下内容压缩为一条 Telegram 消息。
+规则:
+- 全中文
+- 口语化，适当 emoji
+- ≤300字
+- 有干货，不水""",
+
+    "zhihu": """你是知乎科技领域答主。将以下内容写成知乎回答段落。
+风格: 深度分析，有观点，400-600字。带引用格式标注来源。""",
+
+    "telegram": """你是 Telegram 科技频道编辑。压缩为一条消息。
 格式: 🔥 [中文标题]
 📝 一句话要点
 🔗 原文链接
-不超过 200 字。简洁有力。""",
+不超过 150 字。简洁有力。""",
 
-    "douyin": """你是抖音科技博主。将以下内容写成抖音视频口播文案+文案区内容。
-风格: 极度口语化，像跟朋友吃饭时随口聊一个新鲜事。开头3秒必须有钩子（"你绝对想不到..." "刚刚爆出来的..." "这几天AI圈炸了..."）。
-文案区内容 ≤300字，分两段：第一段说事，第二段一句话点评引互动（"你们觉得呢？" "这个方向我看好"）。
-末尾加 3-5 个标签，如 #AI #科技 #干货。
-禁止书面语、禁止长难句、禁止"随着...的发展"。""",
+    "douyin": """你是抖音科技博主。写成抖音视频口播文案。
+风格: 口语化，开头3秒必须有钩子。
+文案区 ≤200字：第一段说事，第二段一句话引互动。
+末尾加 3 个标签。
+禁止书面语、禁止长难句。""",
 }
 
 
@@ -197,7 +208,7 @@ def generate_overview(articles: list[dict]) -> str:
 
     summary_text = "\n".join(summaries[:12])
 
-    system = "你是一个科技新闻主编。分析以下近两天的科技新闻，输出一段中文概览（200字以内）。"
+    system = "你是一个科技新闻主编。分析以下近两天的科技新闻，输出一段中文概览（150字以内）。"
     user = f"""以下是近两天的科技新闻：
 
 {summary_text}
@@ -206,7 +217,7 @@ def generate_overview(articles: list[dict]) -> str:
 1. 这两天整体发生了什么
 2. 如果有重磅/突破性消息，重点指出来（没有就不写）
 
-要求：自然段落，不要列表，不要编号。"""
+要求：自然段落，不要列表，不要编号，不要 emoji。"""
 
     result = _chat(system, user, temperature=0.3, max_tokens=500)
     print(f"[process] overview generated ({len(result)} chars)")
@@ -233,22 +244,32 @@ def assemble_digest(articles: list[dict], posts_map: dict, overview: str = "") -
     # overview section
     overview_section = ""
     if overview:
-        overview_section = f"📋 概览\n{overview}\n\n"
+        overview_section = f"## 📋 本期概览\n\n{overview}\n\n---\n\n"
 
-    # each article: a flowing paragraph summary
+    # each article: brief summary
     entries = []
     for it in items:
-        parts_list = [p.rstrip("。").rstrip(".") for p in it["key_points"] if p]
-        para = "。".join(parts_list) + "。" if parts_list else "暂无摘要"
+        parts_list = [p.rstrip("。").rstrip(".").strip() for p in it["key_points"] if p and p.strip()]
+        if parts_list:
+            # deduplicate: if one_liner is essentially the same as first key_point, skip it
+            one_liner = it.get("one_liner", "").rstrip("。").rstrip(".").strip()
+            if one_liner and parts_list and one_liner not in parts_list[0] and parts_list[0] not in one_liner:
+                para = f"{one_liner}。{parts_list[0]}。"
+            elif one_liner:
+                para = f"{one_liner}。"
+            else:
+                para = f"{parts_list[0]}。"
+        else:
+            para = it.get("one_liner", "暂无摘要").rstrip("。").strip() + "。"
 
         entries.append(
-            f"## {it['title_cn']}\n\n"
+            f"### {it['title_cn']}\n\n"
             f"{para}\n\n"
-            f"来源: {it['source']}  |  🔗 [原文链接]({it['url']})\n"
+            f"来源: {it['source']}  |  [原文链接]({it['url']})\n"
         )
 
     digest = (
-        f"# 🤖 AI/科技早报 | {today}\n\n"
+        f"# 🤖 AI/科技文摘 | {today}\n\n"
         f"{overview_section}"
         + "\n---\n".join(entries)
         + "\n\n> 📬 AI 自动生成\n"

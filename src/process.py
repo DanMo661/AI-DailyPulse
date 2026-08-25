@@ -88,9 +88,14 @@ def _fallback_digest(article: dict) -> dict:
     }
 
 
-def process_articles(articles: list[dict]) -> list[dict]:
-    """Filter + summarize each article in a single LLM call, drop irrelevant ones."""
+def process_articles(articles: list[dict]) -> tuple[list[dict], int]:
+    """Filter + summarize each article in a single LLM call, drop irrelevant ones.
+
+    Returns (kept_articles, error_count). A failed call keeps the article with a
+    fallback digest; the caller decides whether the error ratio is acceptable.
+    """
     kept = []
+    errors = 0
     for i, a in enumerate(articles):
         print(f"[process] digesting {i+1}/{len(articles)}: {a['title'][:50]}")
         text = f"标题: {a['title']}\n来源: {a['source']}\n摘要: {a.get('summary', '')[:1500]}"
@@ -109,10 +114,16 @@ def process_articles(articles: list[dict]) -> list[dict]:
         except Exception as e:
             print(f"[process] digest error for '{a['title'][:40]}': {e}")
             # LLM failure shouldn't drop the article
+            errors += 1
             a["digest"] = _fallback_digest(a)
         kept.append(a)
-    print(f"[process] filtered: {len(articles)} → {len(kept)}")
-    return kept
+    print(f"[process] filtered: {len(articles)} → {len(kept)} ({errors} errors)")
+    return kept, errors
+
+
+# abort publishing when this fraction of LLM calls fails — a full API outage
+# shouldn't push a digest full of fallback placeholders to channels
+MAX_ERROR_RATIO = 0.5
 
 
 # ─── Step 2: Multi-style Rewrite ────────────────────────
@@ -275,9 +286,15 @@ def process_all():
         return None
 
     # Step 1: filter + summarize
-    articles = process_articles(articles)
+    articles, errors = process_articles(articles)
     if not articles:
         print("[process] all articles filtered out")
+        return None
+    if errors and errors / len(articles) >= MAX_ERROR_RATIO:
+        print(
+            f"[process] aborting: {errors}/{len(articles)} LLM calls failed "
+            f"(invalid API key or quota?) — skipping publish"
+        )
         return None
 
     # Step 2: multi-style posts for top articles

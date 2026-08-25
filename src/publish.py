@@ -1,4 +1,9 @@
+import base64
+import hashlib
+import hmac
 import json
+import re
+import time
 from datetime import datetime
 
 import requests
@@ -11,6 +16,7 @@ from config import (
     WP_APP_PASSWORD,
     FEISHU_WEBHOOK_URL,
     FEISHU_SECRET,
+    BEIJING_TZ,
     DIGEST_OUTPUT,
     SOCIAL_OUTPUT,
     OUTPUT_DIR,
@@ -19,68 +25,53 @@ from config import (
 
 # ─── Telegram ───────────────────────────────────────────
 
-def publish_telegram(text: str) -> bool:
-    """Send a message to a Telegram channel."""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL:
-        print("[publish] Telegram not configured, skip")
-        return False
-
+def _telegram_api(text: str, parse_mode: str | None) -> bool:
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHANNEL,
+        "text": text,
+        "disable_web_page_preview": False,
+    }
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
     try:
-        resp = requests.post(url, json={
-            "chat_id": TELEGRAM_CHANNEL,
-            "text": text,
-            "parse_mode": "Markdown",
-            "disable_web_page_preview": False,
-        }, timeout=15)
+        resp = requests.post(url, json=payload, timeout=15)
         data = resp.json()
         if data.get("ok"):
-            print("[publish] Telegram sent")
             return True
-        else:
-            print(f"[publish] Telegram error: {data.get('description')}")
-            # retry without markdown parse
-            resp2 = requests.post(url, json={
-                "chat_id": TELEGRAM_CHANNEL,
-                "text": text,
-            }, timeout=15)
-            if resp2.json().get("ok"):
-                print("[publish] Telegram sent (plain text fallback)")
-                return True
+        print(f"[publish] Telegram error: {data.get('description')}")
     except Exception as e:
         print(f"[publish] Telegram failed: {e}")
     return False
 
 
-def publish_telegram_digest(digest: str):
-    """Send the daily digest as a series of Telegram messages."""
-    # send a short summary first
-    lines = digest.split("\n")
-    today = datetime.now().strftime("%Y-%m-%d")
+def publish_telegram(text: str) -> bool:
+    """Send a single message to a Telegram channel, plain-text fallback."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL:
+        print("[publish] Telegram not configured, skip")
+        return False
+    if _telegram_api(text, "Markdown"):
+        return True
+    return _telegram_api(text, None)
 
-    # first message: headline + top items
-    intro = f"🤖 *AI/科技早报 | {today}*\n\n"
-    quick_section = False
-    quick_items = []
-    for line in lines:
-        if "今日速览" in line:
-            quick_section = True
+
+def publish_telegram_digest(digest: str) -> bool:
+    """Send the daily digest as one message per article section."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL:
+        print("[publish] Telegram not configured, skip")
+        return False
+
+    sent = 0
+    for section in re.split(r"\n(?=### )", digest):
+        text = section.strip()
+        if not text:
             continue
-        if quick_section and line.startswith("🔹"):
-            quick_items.append(line)
-        elif quick_section and line.startswith("---"):
-            break
-
-    if quick_items:
-        intro += "\n".join(quick_items[:5])
-
-    publish_telegram(intro)
-
-    # send each article as a separate message
-    article_count = 0
-    for line in lines:
-        if line.startswith("## ") and article_count < 8:
-            article_count += 1
+        for i in range(0, len(text), 4000):
+            if publish_telegram(text[i:i + 4000]):
+                sent += 1
+            time.sleep(1)
+    print(f"[publish] Telegram sent {sent} messages")
+    return sent > 0
 
 
 # ─── WordPress ──────────────────────────────────────────
@@ -116,9 +107,15 @@ def publish_wordpress(title: str, content: str, status: str = "draft") -> bool:
 
 # ─── Feishu ─────────────────────────────────────────────
 
+def _feishu_sign(timestamp: str, secret: str) -> str:
+    # Feishu's scheme: the HMAC key is "{timestamp}\n{secret}" with an empty message
+    string_to_sign = f"{timestamp}\n{secret}"
+    digest = hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+    return base64.b64encode(digest).decode()
+
+
 def _markdown_to_feishu_text(md: str) -> str:
     """Convert basic markdown to Feishu-friendly plain text."""
-    import re
     # remove heading markers, keep text
     md = re.sub(r'^#+\s*', '', md, flags=re.MULTILINE)
     # bold: **text** -> 【text】
@@ -156,17 +153,18 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
             "content": {"text": text},
         }
         if FEISHU_SECRET:
-            import hmac
-            import hashlib
-            import base64
             ts = str(int(datetime.now().timestamp()))
-            key = FEISHU_SECRET.encode()
-            msg = f"{ts}\n{FEISHU_SECRET}".encode()
-            h = hmac.new(key, msg, hashlib.sha256)
             body["timestamp"] = ts
-            body["sign"] = base64.b64encode(h.digest()).decode()
-        resp = requests.post(FEISHU_WEBHOOK_URL, json=body, timeout=15)
-        return resp.json().get("code") == 0
+            body["sign"] = _feishu_sign(ts, FEISHU_SECRET)
+        try:
+            resp = requests.post(FEISHU_WEBHOOK_URL, json=body, timeout=15)
+            data = resp.json()
+            if data.get("code") == 0:
+                return True
+            print(f"[publish] Feishu error: {data.get('code')} {data.get('msg')}")
+        except Exception as e:
+            print(f"[publish] Feishu request failed: {e}")
+        return False
 
     try:
         # message 1: overview
@@ -183,7 +181,6 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
             for chunk in chunks:
                 if _send(chunk):
                     success_count += 1
-                import time
                 time.sleep(0.3)
 
         # messages after: social media copy-paste posts
@@ -195,17 +192,15 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
                         continue
                     label = {"xiaohongshu": "小红书", "douyin": "抖音"}[platform]
                     header = f"――――――――――\n【{label}文案 - 复制发布】\n――――――――――\n\n"
-                    full = header + content
-                    if _send(full):
+                    if _send(header + content):
                         success_count += 1
-                    import time
                     time.sleep(0.3)
     except Exception as e:
         print(f"[publish] Feishu failed: {e}")
         return False
 
     print(f"[publish] Feishu sent {success_count} messages")
-    return True
+    return success_count > 0
 
 
 # ─── File export for manual review ──────────────────────
@@ -217,7 +212,7 @@ def save_manual_posts(posts_map: dict):
 
     manual_dir = OUTPUT_DIR / "manual_review"
     manual_dir.mkdir(exist_ok=True)
-    today = datetime.now().strftime("%Y%m%d")
+    today = datetime.now(BEIJING_TZ).strftime("%Y%m%d")
 
     for article_id, platforms in posts_map.items():
         for platform, content in platforms.items():
@@ -232,7 +227,7 @@ def save_manual_posts(posts_map: dict):
 
 def save_daily_files(digest: str):
     """Save the daily digest and social posts as permanent files."""
-    today = datetime.now().strftime("%Y%m%d")
+    today = datetime.now(BEIJING_TZ).strftime("%Y%m%d")
 
     # Copy digest to dated file
     dated_digest = OUTPUT_DIR / f"digest_{today}.md"
@@ -251,6 +246,7 @@ def save_daily_files(digest: str):
 def publish_all(digest: str, posts_map: dict):
     """Run all publishing steps."""
     results = {}
+    today = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
 
     # 1. Feishu - instant push (domestic priority, includes social posts)
     results["feishu"] = publish_feishu(digest, posts_map)
@@ -259,12 +255,11 @@ def publish_all(digest: str, posts_map: dict):
     results["telegram"] = publish_telegram_digest(digest)
 
     # 3. WordPress - draft (safe, won't auto-publish)
-    today = datetime.now().strftime("%Y-%m-%d")
     title = f"AI/科技早报 | {today}"
     wp_preview = digest[:3000] + "\n\n...\n\n[完整版见公众号]"
     results["wordpress"] = publish_wordpress(title, wp_preview, status="draft")
 
-    # 3. Save for manual review (WeChat, XHS, Zhihu)
+    # 4. Save for manual review (WeChat, XHS, Zhihu)
     save_manual_posts(posts_map)
     save_daily_files(digest)
 

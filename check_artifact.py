@@ -12,12 +12,12 @@ if not GH_TOKEN:
 auth = (GH_USER, GH_TOKEN)
 r = requests.get(f'https://api.github.com/repos/{GH_USER}/{GH_REPO}/actions/artifacts',
     headers={'Accept': 'application/vnd.github+json'},
-    auth=auth, verify=False)
+    auth=auth)
 arts = r.json().get('artifacts', [])
 
 if arts:
     a = arts[0]
-    dl = requests.get(a['archive_download_url'], auth=auth, verify=False)
+    dl = requests.get(a['archive_download_url'], auth=auth)
     z = zipfile.ZipFile(io.BytesIO(dl.content))
     for f in z.namelist():
         out_path = os.path.join(OUTPUT_DIR, f)

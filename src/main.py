@@ -11,6 +11,8 @@ Usage:
 Environment variables required:
     DEEPSEEK_API_KEY        - DeepSeek API key
     DEEPSEEK_BASE_URL       - (optional) custom endpoint
+    FEISHU_WEBHOOK_URL      - (optional) Feishu bot webhook
+    FEISHU_SECRET           - (optional) Feishu bot sign secret
     TELEGRAM_BOT_TOKEN      - (optional) Telegram bot token
     TELEGRAM_CHANNEL        - (optional) Telegram channel @name
     WP_URL / WP_USER / WP_APP_PASSWORD - (optional) WordPress
@@ -21,7 +23,7 @@ import sys
 from collect import collect_all
 from process import process_all
 from publish import publish_all
-from config import DIGEST_OUTPUT, SOCIAL_OUTPUT
+from config import DIGEST_OUTPUT, SOCIAL_OUTPUT, validate_config
 
 
 def main():
@@ -42,12 +44,17 @@ def main():
         print(f"  Collected {len(articles)} new articles\n")
 
     if process_only or run_all:
+        validate_config()
         print("=" * 50)
         print("  STEP 2: PROCESS")
         print("=" * 50)
         result = process_all()
         if result:
             print(f"  Processed {result['article_count']} articles\n")
+        elif run_all:
+            # process failed or filtered everything — don't publish stale/empty output
+            print("Pipeline aborted: nothing to publish.")
+            sys.exit(1)
 
     if publish_only or run_all:
         print("=" * 50)

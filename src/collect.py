@@ -17,16 +17,16 @@ from config import (
 )
 
 
-def load_seen():
+def load_seen() -> list:
+    """Load seen article ids, preserving order (oldest first)."""
     if SEEN_URLS_FILE.exists():
-        return set(json.loads(SEEN_URLS_FILE.read_text(encoding="utf-8")))
-    return set()
+        return json.loads(SEEN_URLS_FILE.read_text(encoding="utf-8"))
+    return []
 
 
-def save_seen(seen):
-    # keep last 5000 to avoid unbounded growth
-    items = list(seen)[-5000:]
-    SEEN_URLS_FILE.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+def save_seen(seen: list):
+    # keep newest 5000 to avoid unbounded growth (list is insertion-ordered)
+    SEEN_URLS_FILE.write_text(json.dumps(seen[-5000:], ensure_ascii=False), encoding="utf-8")
 
 
 def _md5(text):
@@ -64,32 +64,6 @@ def fetch_hn_top():
                 continue
     except Exception as e:
         print(f"[collect] HN top failed: {e}")
-    return articles
-
-
-def fetch_reddit(subreddit_key):
-    """Fetch from a Reddit subreddit."""
-    articles = []
-    url = SOURCES[subreddit_key]
-    sub_name = subreddit_key.replace("reddit_", "r/")
-    try:
-        headers = {"User-Agent": "AI-Digest-Bot/1.0"}
-        resp = requests.get(url, headers=headers, timeout=15)
-        data = resp.json()
-        for child in data.get("data", {}).get("children", [])[:MAX_ARTICLES_PER_SOURCE]:
-            post = child["data"]
-            if post.get("url"):
-                articles.append({
-                    "id": _make_id(post["url"]),
-                    "title": post.get("title", ""),
-                    "url": post["url"],
-                    "summary": post.get("selftext", "")[:500],
-                    "source": sub_name,
-                    "score": post.get("score", 0),
-                    "fetched_at": datetime.now(timezone.utc).isoformat(),
-                })
-    except Exception as e:
-        print(f"[collect] {sub_name} failed: {e}")
     return articles
 
 
@@ -162,12 +136,11 @@ def fetch_rss(url):
 def collect_all():
     """Fetch from all sources in parallel, deduplicate, return top articles."""
     seen = load_seen()
+    seen_set = set(seen)
     all_articles = []
 
     tasks = [
         ("hn", fetch_hn_top),
-        ("reddit_programming", lambda: fetch_reddit("reddit_programming")),
-        ("reddit_ml", lambda: fetch_reddit("reddit_machinelearning")),
         ("devto", fetch_devto),
         ("arxiv", fetch_arxiv),
     ]
@@ -188,9 +161,10 @@ def collect_all():
     # dedup + filter seen
     new_articles = []
     for a in all_articles:
-        if a["id"] not in seen:
+        if a["id"] not in seen_set:
             new_articles.append(a)
-            seen.add(a["id"])
+            seen_set.add(a["id"])
+            seen.append(a["id"])
 
     # sort by score desc
     new_articles.sort(key=lambda x: x["score"], reverse=True)

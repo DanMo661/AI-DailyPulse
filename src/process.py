@@ -287,14 +287,10 @@ def process_all():
 
     # Step 1: filter + summarize
     articles, errors = process_articles(articles)
+    if errors and errors / len(articles) >= MAX_ERROR_RATIO:
+        return {"abort": f"{errors}/{len(articles)} LLM calls failed (invalid API key or quota?)"}
     if not articles:
         print("[process] all articles filtered out")
-        return None
-    if errors and errors / len(articles) >= MAX_ERROR_RATIO:
-        print(
-            f"[process] aborting: {errors}/{len(articles)} LLM calls failed "
-            f"(invalid API key or quota?) — skipping publish"
-        )
         return None
 
     # Step 2: multi-style posts for top articles

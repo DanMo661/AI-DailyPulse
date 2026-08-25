@@ -49,12 +49,16 @@ def main():
         print("  STEP 2: PROCESS")
         print("=" * 50)
         result = process_all()
+        if result and "abort" in result:
+            # e.g. LLM API outage — don't publish a digest of fallback placeholders
+            print(f"Pipeline aborted: {result['abort']}")
+            sys.exit(1)
         if result:
             print(f"  Processed {result['article_count']} articles\n")
         elif run_all:
-            # process failed or filtered everything — don't publish stale/empty output
-            print("Pipeline aborted: nothing to publish.")
-            sys.exit(1)
+            # nothing new collected / everything filtered out — normal day, not an error
+            print("  Nothing new to process — skipping publish.\n")
+            run_all = False
 
     if publish_only or run_all:
         print("=" * 50)

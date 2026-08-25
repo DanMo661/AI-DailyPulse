@@ -126,7 +126,112 @@ def process_articles(articles: list[dict]) -> tuple[list[dict], int]:
 MAX_ERROR_RATIO = 0.5
 
 
-# ─── Step 2: Multi-style Rewrite ────────────────────────
+# ─── Step 2: Finalize (one editor call → headline + 4 picks) ──
+
+FINALIZE_PROMPT = """你是科技新闻主编，为每日 AI/科技早报定稿。
+
+下面是一批候选文章的摘要（已筛过，含中文标题、要点、来源、原文链接）。请：
+
+1. 选出本日最重磅、最值得头条的 1 篇：
+   - headline_title: 抓人眼球的中文标题（≤25字，侧重重点，如"DeepSeek V4 正式版发布！"）
+   - headline_paragraph: 120~180字正文，一句话点出新闻，再展开核心信息，自然段落，不列点
+2. 另选 4 篇本日最值得关注的，按重要性从高到低排序，每篇：
+   - title_cn: 中文标题（英文原文转中文，忠于原意）
+   - blurb: 50字左右简介
+   - url: 原文链接（必须引用下方候选中的 url，禁止编造）
+
+链接规则: 头条与精选的链接优先选新闻站点/公司官网/官方博客；
+x.com、twitter.com、reddit.com、youtube.com 等社交平台链接只能在没有更好来源时使用。
+
+正文规则: 只基于候选摘要里已有的信息写作，不得编造具体数字、引语或原文没有的细节。
+
+头条标准：重大突破/发布、行业大事件优先；教程、软文、普通产品体验不得当头条。
+
+仅输出 JSON：
+{"headline": {"url": "...", "headline_title": "...", "headline_paragraph": "..."},
+ "items": [{"url": "...", "title_cn": "...", "blurb": "..."}]}
+// items 恰好 4 条，不得包含头条，顺序即重要性降序"""
+
+
+def _candidate_section(articles: list[dict]) -> str:
+    lines = []
+    for i, a in enumerate(articles, 1):
+        d = a.get("digest", {})
+        lines.append(
+            f"[{i}] 标题: {a['title']} | 中文: {d.get('title_cn', '')} | "
+            f"要点: {'；'.join(d.get('key_points', []))} | 一句话: {d.get('one_liner', '')} | "
+            f"来源: {a['source']} | 链接: {a['url']}"
+        )
+    return "\n".join(lines)
+
+
+def finalize(articles: list[dict]) -> dict:
+    """Pick the headline story + 4 picks from the candidates; sanitize the model output."""
+    by_url = {a["url"]: a for a in articles}
+    ranked = sorted(articles, key=lambda a: a.get("digest", {}).get("relevance_score", 0), reverse=True)
+
+    def _fallback() -> dict:
+        top = ranked[0]
+        d = top["digest"]
+        return {
+            "headline": {
+                "url": top["url"],
+                "headline_title": d.get("title_cn", top["title"]),
+                "headline_paragraph": f"{d.get('one_liner', '')}。{d.get('key_points', [''])[0]}",
+            },
+            "items": [],
+        }
+
+    try:
+        data = _parse_json(_chat(
+            FINALIZE_PROMPT, _candidate_section(articles),
+            temperature=0.2, max_tokens=1200, json_mode=True,
+        ))
+    except Exception as e:
+        print(f"[process] finalize error, using fallback picks: {e}")
+        return _fallback()
+
+    headline = dict(data.get("headline") or {})
+    ha = by_url.get(str(headline.get("url", "")))
+    if not ha:  # model invented a url — take the top-ranked candidate
+        ha = ranked[0]
+        headline["url"] = ha["url"]
+    hd = ha["digest"]
+    if not headline.get("headline_title"):
+        headline["headline_title"] = hd.get("title_cn", ha["title"])
+    if not headline.get("headline_paragraph"):
+        headline["headline_paragraph"] = f"{hd.get('one_liner', '')}。{hd.get('key_points', [''])[0]}"
+
+    items, seen_urls = [], {headline["url"]}
+    for it in data.get("items") or []:
+        url = str(it.get("url", ""))
+        if url in seen_urls or url not in by_url:
+            continue
+        seen_urls.add(url)
+        items.append({
+            "url": url,
+            "title_cn": str(it.get("title_cn") or by_url[url]["digest"].get("title_cn", ""))[:50],
+            "blurb": str(it.get("blurb") or by_url[url]["digest"].get("one_liner", ""))[:80],
+        })
+        if len(items) == 4:
+            break
+    # fill missing picks from the ranking (prefer error-free LLM output but never starve the list)
+    for a in ranked:
+        if len(items) >= 4:
+            break
+        if a["url"] in seen_urls:
+            continue
+        seen_urls.add(a["url"])
+        items.append({
+            "url": a["url"],
+            "title_cn": a["digest"].get("title_cn", a["title"])[:50],
+            "blurb": a["digest"].get("one_liner", "")[:80],
+        })
+
+    return {"headline": headline, "items": items}
+
+
+# ─── Step 3: Headline Rewrite (social posts) ────────────
 
 STYLE_PROMPTS = {
     "wechat": """你是微信公众号科技编辑。将以下内容写成公众号推送段落。
@@ -162,17 +267,12 @@ STYLE_PROMPTS = {
 禁止书面语、禁止长难句。""",
 }
 
-REWRITE_TOP_N = 5
-REWRITE_MIN_SCORE = 0.6
 
-
-def generate_social_posts(article: dict) -> dict:
-    """Generate multi-platform social media posts for one article."""
-    digest = article.get("digest", {})
-    content = f"""标题(英): {article['title']}
-标题(中): {digest.get('title_cn', '')}
-要点: {json.dumps(digest.get('key_points', []), ensure_ascii=False)}
-一句话: {digest.get('one_liner', '')}
+def generate_headline_posts(headline: dict, article: dict) -> dict:
+    """Generate multi-platform social posts for the headline story."""
+    content = f"""头条标题: {headline['headline_title']}
+正文介绍: {headline['headline_paragraph']}
+要点: {json.dumps(article['digest'].get('key_points', []), ensure_ascii=False)}
 来源: {article['source']}
 原文: {article['url']}"""
 
@@ -186,86 +286,29 @@ def generate_social_posts(article: dict) -> dict:
     return posts
 
 
-# ─── Step 3: Period Overview ────────────────────────────
-
-def generate_overview(articles: list[dict]) -> str:
-    """Generate a period overview identifying major/breaking news."""
-    if not articles:
-        return ""
-
-    summaries = []
-    for a in articles:
-        d = a.get("digest", {})
-        title = d.get("title_cn", a["title"])
-        one = d.get("one_liner", "")
-        if one:
-            summaries.append(f"- {title}：{one}")
-        else:
-            summaries.append(f"- {title}")
-
-    summary_text = "\n".join(summaries[:12])
-
-    system = "你是一个科技新闻主编。分析以下本期科技新闻，输出一段中文概览（150字以内）。"
-    user = f"""以下是本期科技新闻：
-
-{summary_text}
-
-请写一段概览，包含：
-1. 本期整体发生了什么
-2. 如果有重磅/突破性消息，重点指出来（没有就不写）
-
-要求：自然段落，不要列表，不要编号，不要 emoji。"""
-
-    try:
-        result = _chat(system, user, temperature=0.3, max_tokens=500)
-        print(f"[process] overview generated ({len(result)} chars)")
-        return result
-    except Exception as e:
-        print(f"[process] overview error (skipping): {e}")
-        return ""
-
-
 # ─── Step 4: Assemble Daily Digest ──────────────────────
 
-def assemble_digest(articles: list[dict], overview: str = "") -> str:
-    """Assemble all summaries into a daily digest markdown."""
+def assemble_digest(headline: dict, items: list[dict], cover_file: str = "") -> str:
+    """Assemble the blog-style digest: 1 headline story + a numbered pick list."""
     today = datetime.now(BEIJING_TZ).strftime("%Y年%m月%d日")
 
-    # overview section
-    overview_section = ""
-    if overview:
-        overview_section = f"## 📋 本期概览\n\n{overview}\n\n---\n\n"
+    cover_section = f"\n![封面]({cover_file})\n" if cover_file else ""
 
-    # each article: brief summary
-    entries = []
-    for a in articles:
-        d = a.get("digest", {})
-        title_cn = d.get("title_cn", a["title"])
-        one_liner = d.get("one_liner", "")
-        points = [p.rstrip("。").rstrip(".").strip() for p in d.get("key_points", []) if p and p.strip()]
-
-        if points:
-            # deduplicate: if one_liner is essentially the same as first key_point, skip it
-            one = one_liner.rstrip("。").rstrip(".").strip()
-            if one and one not in points[0] and points[0] not in one:
-                para = f"{one}。{points[0]}。"
-            elif one:
-                para = f"{one}。"
-            else:
-                para = f"{points[0]}。"
-        else:
-            para = (one_liner or "暂无摘要").rstrip("。").strip() + "。"
-
-        entries.append(
-            f"### {title_cn}\n\n"
-            f"{para}\n\n"
-            f"来源: {a['source']}  |  [原文链接]({a['url']})\n"
+    list_entries = []
+    for i, it in enumerate(items, 1):
+        list_entries.append(
+            f"{i}. **{it['title_cn']}**（[原文]({it['url']})）— {it['blurb'].rstrip('。')}。"
         )
 
     digest = (
         f"# 🤖 AI DailyPulse | {today}\n\n"
-        f"{overview_section}"
-        + "\n---\n".join(entries)
+        f"## 🔥 今日头条\n\n"
+        f"### {headline['headline_title']}\n\n"
+        f"{headline['headline_paragraph'].rstrip('。')}。\n"
+        f"{cover_section}\n"
+        f"[原文链接]({headline['url']})\n\n"
+        f"## 📌 其他重点\n\n"
+        + "\n".join(list_entries)
         + "\n\n> 📬 AI 自动生成\n"
     )
 
@@ -293,22 +336,31 @@ def process_all():
         print("[process] all articles filtered out")
         return None
 
-    # Step 2: multi-style posts for top articles
+    # Step 2: pick headline + 4 items
+    final = finalize(articles)
+    headline = final["headline"]
+    items = final["items"]
+    print(f"[process] headline: {headline['headline_title']} ({len(items)} picks)")
+
+    # Step 3: social posts for the headline story only
+    headline_article = next((a for a in articles if a["url"] == headline["url"]), articles[0])
     posts_map = {}
-    for i, a in enumerate(articles[:REWRITE_TOP_N]):
-        if a.get("digest", {}).get("relevance_score", 0) > REWRITE_MIN_SCORE:
-            print(f"[process] rewriting {i+1}: {a['digest'].get('title_cn', '')[:40]}")
-            posts_map[a["id"]] = generate_social_posts(a)
+    if headline_article.get("digest", {}).get("relevance_score", 0) > 0.5:
+        posts_map[headline_article["id"]] = generate_headline_posts(headline, headline_article)
 
-    # Step 3: generate period overview
-    overview = generate_overview(articles)
+    # Step 4: cover image from the headline article's site (never blocks the digest)
+    cover_file = ""
+    try:
+        from cover import fetch_cover
+        cover_file = fetch_cover(headline["url"]) or ""
+    except Exception as e:
+        print(f"[process] cover skipped: {e}")
 
-    # Step 4: assemble digest
-    digest = assemble_digest(articles, overview)
+    # Step 5: assemble blog-style digest
+    digest = assemble_digest(headline, items, cover_file)
     DIGEST_OUTPUT.write_text(digest, encoding="utf-8")
     print(f"[process] digest written to {DIGEST_OUTPUT}")
 
-    # Save social posts
     SOCIAL_OUTPUT.write_text(
         json.dumps(posts_map, ensure_ascii=False, indent=2), encoding="utf-8"
     )

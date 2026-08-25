@@ -9,7 +9,7 @@ on:
 jobs:
   digest:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -44,4 +44,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: daily-digest-output
-          path: output/
+          path: |
+            output/
+            data/raw_articles.json

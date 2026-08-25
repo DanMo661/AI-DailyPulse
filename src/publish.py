@@ -137,14 +137,6 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
         print("[publish] Feishu not configured, skip")
         return False
 
-    # split digest into overview and individual article sections
-    # format: # title\n\noverview\n\n---\n## article1\n...\n---\n## article2\n...
-    parts = digest.split("---\n")
-    overview_raw = parts[0] if len(parts) > 0 else ""
-    article_blocks = parts[1:] if len(parts) > 1 else []
-
-    overview_text = _markdown_to_feishu_text(overview_raw)
-
     success_count = 0
 
     def _send(text: str) -> bool:
@@ -167,23 +159,16 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
         return False
 
     try:
-        # message 1: overview
-        if _send(overview_text):
-            success_count += 1
+        # the v2 digest is short (headline + 4 picks): send it whole,
+        # chunk only if it somehow exceeds the message limit
+        text = _markdown_to_feishu_text(digest.strip())
+        chunks = [text[i:i+25000] for i in range(0, len(text), 25000)]
+        for chunk in chunks:
+            if _send(chunk):
+                success_count += 1
+            time.sleep(0.3)
 
-        # messages 2+: one message per article
-        for block in article_blocks:
-            block = block.strip()
-            if not block:
-                continue
-            text = _markdown_to_feishu_text(block)
-            chunks = [text[i:i+25000] for i in range(0, len(text), 25000)]
-            for chunk in chunks:
-                if _send(chunk):
-                    success_count += 1
-                time.sleep(0.3)
-
-        # messages after: social media copy-paste posts
+        # social media copy-paste posts for the headline story
         if posts_map:
             for article_id, platforms in posts_map.items():
                 for platform in ("xiaohongshu", "douyin"):
@@ -256,7 +241,7 @@ def publish_all(digest: str, posts_map: dict):
 
     # 3. WordPress - draft (safe, won't auto-publish)
     title = f"AI DailyPulse | {today}"
-    wp_preview = digest[:3000] + "\n\n...\n\n[完整版见公众号]"
+    wp_preview = digest[:10000].rstrip() + "\n\n[完整版见公众号]"
     results["wordpress"] = publish_wordpress(title, wp_preview, status="draft")
 
     # 4. Save for manual review (WeChat, XHS, Zhihu)

@@ -252,7 +252,7 @@ def assemble_digest(articles: list[dict], overview: str = "") -> str:
         )
 
     digest = (
-        f"# 🤖 AI/科技文摘 | {today}\n\n"
+        f"# 🤖 AI DailyPulse | {today}\n\n"
         f"{overview_section}"
         + "\n---\n".join(entries)
         + "\n\n> 📬 AI 自动生成\n"

@@ -1,7 +1,7 @@
 import requests, io, zipfile, json, os
 
 GH_USER = "DanMo661"
-GH_REPO = "ai-digest-bot"
+GH_REPO = "AI-DailyPulse"
 GH_TOKEN = os.environ.get("GH_PAT", "")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output_cloud")
 

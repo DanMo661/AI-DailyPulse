@@ -1,4 +1,4 @@
-"""AI Digest Bot - Main Pipeline
+"""AI DailyPulse - Main Pipeline
 
 Collect → Process → Publish
 

@@ -1,4 +1,4 @@
-name: Daily AI Digest
+name: AI DailyPulse
 
 on:
   schedule:

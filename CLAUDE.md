@@ -1,4 +1,4 @@
-# ai-digest-bot
+# AI DailyPulse
 
 全自动 AI/科技文摘管线：采集 → LLM 处理 → 多渠道发布。GitHub Actions 每天北京时间 08:00 / 20:00 定时运行。
 
@@ -29,4 +29,4 @@ cp .env.example .env   # 填 DEEPSEEK_API_KEY（必填）
 
 ## CI
 
-`.github/workflows/daily-digest.yml`。改动后用 `gh workflow run "Daily AI Digest"` 手动触发验证；schedule 长期不活跃会被 GitHub 自动禁用，用 `gh workflow enable` 恢复。
+`.github/workflows/daily-digest.yml`。改动后用 `gh workflow run "AI DailyPulse"` 手动触发验证；schedule 长期不活跃会被 GitHub 自动禁用，用 `gh workflow enable` 恢复。

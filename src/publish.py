@@ -255,7 +255,7 @@ def publish_all(digest: str, posts_map: dict):
     results["telegram"] = publish_telegram_digest(digest)
 
     # 3. WordPress - draft (safe, won't auto-publish)
-    title = f"AI/科技早报 | {today}"
+    title = f"AI DailyPulse | {today}"
     wp_preview = digest[:3000] + "\n\n...\n\n[完整版见公众号]"
     results["wordpress"] = publish_wordpress(title, wp_preview, status="draft")
 

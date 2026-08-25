@@ -16,6 +16,11 @@
 - 飞书签名算法特殊：HMAC key = `{timestamp}\n{secret}`，消息体为空，改 `_feishu_sign` 前先查官方文档
 - 日期统一用北京时间（`config.BEIJING_TZ`）
 
+## 密钥
+
+- DeepSeek `DEEPSEEK_API_KEY`（命名 AIuse）：本地在项目根 `.env`（gitignored），GitHub 侧在 repo secret；两处已同步更新。密钥值不放本文件。
+- 飞书 `FEISHU_WEBHOOK_URL` / `FEISHU_SECRET`：仅在 GitHub repo secret。
+
 ## 本地运行与验证
 
 ```bash

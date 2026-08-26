@@ -131,8 +131,8 @@ def _markdown_to_feishu_text(md: str) -> str:
     return md
 
 
-def publish_feishu(digest: str, posts_map: dict = None) -> bool:
-    """Send daily digest and social media posts to Feishu via bot webhook."""
+def publish_feishu(digest: str) -> bool:
+    """Send the daily digest to Feishu via bot webhook (single message)."""
     if not FEISHU_WEBHOOK_URL:
         print("[publish] Feishu not configured, skip")
         return False
@@ -159,7 +159,7 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
         return False
 
     try:
-        # the v2 digest is short (headline + 4 picks): send it whole,
+        # v2 digest is short (headline + 4 picks): send it whole,
         # chunk only if it somehow exceeds the message limit
         text = _markdown_to_feishu_text(digest.strip())
         chunks = [text[i:i+25000] for i in range(0, len(text), 25000)]
@@ -167,19 +167,6 @@ def publish_feishu(digest: str, posts_map: dict = None) -> bool:
             if _send(chunk):
                 success_count += 1
             time.sleep(0.3)
-
-        # social media copy-paste posts for the headline story
-        if posts_map:
-            for article_id, platforms in posts_map.items():
-                for platform in ("xiaohongshu", "douyin"):
-                    content = platforms.get(platform, "")
-                    if not content:
-                        continue
-                    label = {"xiaohongshu": "小红书", "douyin": "抖音"}[platform]
-                    header = f"――――――――――\n【{label}文案 - 复制发布】\n――――――――――\n\n"
-                    if _send(header + content):
-                        success_count += 1
-                    time.sleep(0.3)
     except Exception as e:
         print(f"[publish] Feishu failed: {e}")
         return False
@@ -233,8 +220,8 @@ def publish_all(digest: str, posts_map: dict):
     results = {}
     today = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
 
-    # 1. Feishu - instant push (domestic priority, includes social posts)
-    results["feishu"] = publish_feishu(digest, posts_map)
+    # 1. Feishu - instant push (digest only; social posts live in output files)
+    results["feishu"] = publish_feishu(digest)
 
     # 2. Telegram - instant push
     results["telegram"] = publish_telegram_digest(digest)

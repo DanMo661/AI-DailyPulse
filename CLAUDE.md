@@ -10,7 +10,7 @@
 4. **封面图** `src/cover.py` — 抓头条原文网页的 `og:image`（官网官方分享图）存 `output/cover_YYYYMMDD.*`；抓不到不阻塞
 5. **头条文案** — 头条 1 篇 × 5 平台（公众号/小红书/知乎/Telegram/抖音）
 6. **组装** `output/digest.md` — blog 格式：`🔥 今日头条`（标题+正文+链接+封面引用）+ `📌 其他重点`（1.2.3.4 编号列表）
-7. **发布** `src/publish.py` — 飞书机器人推早报和新浪文案；WordPress 草稿；`output/`（digest/封面/文案/manual_review）随 CI artifact 上传
+7. **发布** `src/publish.py` — 飞书机器人只推早报 1 条（整发）；WordPress 草稿；小红书/抖音文案不推飞书，只存 `output/`（manual_review/），随 CI artifact 上传
 
 ## 约定
 

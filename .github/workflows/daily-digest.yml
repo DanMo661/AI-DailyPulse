@@ -10,6 +10,8 @@ jobs:
   digest:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +40,31 @@ jobs:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
         run: python src/main.py
+
+      # Covers are referenced in the digest by relative name; CI pushes them to
+      # this repo so raw.githubusercontent URLs stay clickable from Feishu/WordPress.
+      - name: Publish covers to repo
+        if: success()
+        run: |
+          mkdir -p covers
+          cp output/cover_* covers/ 2>/dev/null || true
+          # prune covers older than 7 days (file names are cover_YYYYMMDD.*)
+          today=$(date +%s)
+          for f in covers/cover_*; do
+            [ -e "$f" ] || continue
+            d=$(basename "$f" | sed 's/^cover_\([0-9]\{8\}\).*/\1/')
+            if [ -n "$d" ] && [ $(( (today - $(date -d "$d" +%s)) / 86400 )) -ge 7 ]; then rm "$f"; fi
+          done
+          if ! git diff --quiet -- covers/ || ! git status --porcelain covers/ | grep -q .; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add covers/
+            git commit -m "publish covers $(date -u +%F)"
+            git push
+            echo "covers published"
+          else
+            echo "covers unchanged"
+          fi
 
       - name: Upload digest
         if: always()

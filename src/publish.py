@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import re
 import time
 from datetime import datetime
@@ -215,9 +216,18 @@ def save_daily_files(digest: str):
 
 # ─── Orchestrator ───────────────────────────────────────
 
+def resolve_cover_urls(digest: str) -> str:
+    """In CI the cover is published to this repo's covers/ dir at the same commit —
+    swap the relative markdown image for a clickable raw.githubusercontent URL."""
+    base = "https://raw.githubusercontent.com/DanMo661/AI-DailyPulse/main/covers/"
+    return re.sub(r"\]\((cover_[0-9]{8}\.[^)]+)\)", f"]({base}\\1)", digest)
+
+
 def publish_all(digest: str, posts_map: dict):
     """Run all publishing steps."""
     results = {}
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        digest = resolve_cover_urls(digest)
     today = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
 
     # 1. Feishu - instant push (digest only; social posts live in output files)

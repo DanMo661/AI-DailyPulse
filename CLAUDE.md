@@ -50,4 +50,4 @@ cp .env.example .env   # 填 DEEPSEEK_API_KEY（必填）
 
 ## CI
 
-`.github/workflows/daily-digest.yml`。改动后用 `gh workflow run "AI DailyPulse"` 手动触发验证；schedule 长期不活跃会被 GitHub 自动禁用，用 `gh workflow enable` 恢复。artifact 含 `output/` 和 `data/raw_articles.json`（可下载后本地 `--process-only` 复现一期）。
+`.github/workflows/daily-digest.yml`。改动后用 `gh workflow run "AI DailyPulse"` 手动触发验证；schedule 长期不活跃会被 GitHub 自动禁用，用 `gh workflow enable` 恢复。artifact 含 `output/` 和 `data/raw_articles.json`（可下载后本地 `--process-only` 复现一期）。封面图会随每期自动提交到仓库 `covers/` 目录（保留最近 7 天），飞书消息里的图片链接即 `raw.githubusercontent.com/DanMo661/AI-DailyPulse/main/covers/...`。

@@ -33,10 +33,23 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 # China has no DST, fixed offset avoids the tzdata dependency on Windows
 BEIJING_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
 
-# --- LLM ---
-LLM_API_KEY = env_str("DEEPSEEK_API_KEY")
-LLM_BASE_URL = env_str("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-LLM_MODEL = env_str("LLM_MODEL", "deepseek-chat")
+# --- LLM provider ---
+# Two named providers share the same OpenAI-compatible wiring. DeepSeek is the
+# default; setting ORCAROUTER_API_KEY opts the whole pipeline into OrcaRouter
+# (an OpenAI-compatible AI gateway) without touching process.py, which only
+# reads the resolved LLM_* values below.
+ORCAROUTER_API_KEY = env_str("ORCAROUTER_API_KEY")
+ORCAROUTER_BASE_URL = env_str("ORCAROUTER_BASE_URL", "https://api.orcarouter.ai/v1")
+ORCAROUTER_MODEL = env_str("ORCAROUTER_MODEL", "orcarouter/auto")
+
+if ORCAROUTER_API_KEY:
+    LLM_API_KEY = ORCAROUTER_API_KEY
+    LLM_BASE_URL = ORCAROUTER_BASE_URL
+    LLM_MODEL = ORCAROUTER_MODEL
+else:
+    LLM_API_KEY = env_str("DEEPSEEK_API_KEY")
+    LLM_BASE_URL = env_str("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    LLM_MODEL = env_str("LLM_MODEL", "deepseek-chat")
 
 # --- Content Sources ---
 SOURCES = {

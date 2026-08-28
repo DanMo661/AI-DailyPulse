@@ -55,7 +55,7 @@ jobs:
             d=$(basename "$f" | sed 's/^cover_\([0-9]\{8\}\).*/\1/')
             if [ -n "$d" ] && [ $(( (today - $(date -d "$d" +%s)) / 86400 )) -ge 7 ]; then rm "$f"; fi
           done
-          if ! git diff --quiet -- covers/ || ! git status --porcelain covers/ | grep -q .; then
+          if [ -n "$(git status --porcelain covers/)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add covers/

@@ -4,8 +4,11 @@ import hmac
 import json
 import os
 import re
+import shutil
+import subprocess
 import time
 from datetime import datetime
+from pathlib import Path
 
 import requests
 
@@ -216,17 +219,52 @@ def save_daily_files(digest: str):
 
 # ─── Orchestrator ───────────────────────────────────────
 
+# ─── Covers ─────────────────────────────────────────────
+
+COVERS_CDN_BASE = "https://cdn.jsdelivr.net/gh/DanMo661/AI-DailyPulse@main/covers/"
+
+
+def publish_covers_to_repo() -> list[str]:
+    """CI-only: copy freshly fetched covers into covers/, then commit and push
+    them with the checkout's persisted credentials. Replaces the workflow's
+    commit step (whose broken condition kept covers unpublished for weeks);
+    no-ops outside GitHub Actions. Returns pushed filenames."""
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return []
+    covers = sorted(OUTPUT_DIR.glob("cover_*"))
+    if not covers:
+        return []
+    repo_root = Path(__file__).resolve().parents[1]
+    for f in covers:
+        shutil.copy2(f, repo_root / "covers" / f.name)
+
+    def git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", *args], cwd=repo_root, capture_output=True, text=True)
+
+    git("add", "covers")
+    commit = git("commit", "-m", f"publish covers {datetime.now(BEIJING_TZ):%Y-%m-%d}")
+    if commit.returncode == 0:
+        push = git("push")
+        if push.returncode != 0:
+            print(f"[publish] cover push failed: {push.stderr.strip()[:300]}")
+            return []
+    names = [f.name for f in covers]
+    print(f"[publish] covers pushed: {names}")
+    return names
+
+
 def resolve_cover_urls(digest: str) -> str:
-    """In CI the cover is published to this repo's covers/ dir at the same commit —
-    swap the relative markdown image for a clickable raw.githubusercontent URL."""
-    base = "https://raw.githubusercontent.com/DanMo661/AI-DailyPulse/main/covers/"
-    return re.sub(r"\]\((cover_[0-9]{8}\.[^)]+)\)", f"]({base}\\1)", digest)
+    """Swap the digest's relative cover image for a CDN URL. jsDelivr is used
+    because raw.githubusercontent.com is unreliable from mainland China, where
+    Feishu readers click the links."""
+    return re.sub(r"\]\((cover_[0-9]{8}\.[^)]+)\)", f"]({COVERS_CDN_BASE}\\1)", digest)
 
 
 def publish_all(digest: str, posts_map: dict):
     """Run all publishing steps."""
     results = {}
     if os.environ.get("GITHUB_ACTIONS") == "true":
+        publish_covers_to_repo()
         digest = resolve_cover_urls(digest)
     today = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
 

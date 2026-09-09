@@ -23,6 +23,7 @@
 ## 密钥
 
 - DeepSeek `DEEPSEEK_API_KEY`（命名 AIuse）：本地在项目根 `.env`（gitignored），GitHub 侧在 repo secret；两处已同步更新。密钥值不放本文件。
+- OrcaRouter `ORCAROUTER_API_KEY`（可选）：设置后自动接管全部 LLM 调用（base `https://api.orcarouter.ai/v1`，默认模型 `orcarouter/auto`），与 DeepSeek 二选一；GitHub 侧同样走 repo secret。
 - 飞书 `FEISHU_WEBHOOK_URL` / `FEISHU_SECRET`：仅在 GitHub repo secret。
 - `XHS_COOKIE`（小红书）：仅本地 `.env`，微调发布脚本用。
 

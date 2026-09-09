@@ -9,7 +9,9 @@ Usage:
     python src/main.py --publish-only # only publish (needs digest.md + social_posts.json)
 
 Environment variables required:
-    DEEPSEEK_API_KEY        - DeepSeek API key
+    DEEPSEEK_API_KEY        - DeepSeek API key (default provider)
+    ORCAROUTER_API_KEY      - OrcaRouter API key; when set, it takes over all
+                              LLM calls instead of DeepSeek (OpenAI-compatible gateway)
     DEEPSEEK_BASE_URL       - (optional) custom endpoint
     FEISHU_WEBHOOK_URL      - (optional) Feishu bot webhook
     FEISHU_SECRET           - (optional) Feishu bot sign secret

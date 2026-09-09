@@ -22,7 +22,7 @@
 
 ## 密钥
 
-- DeepSeek `DEEPSEEK_API_KEY`（命名 AIuse）：本地在项目根 `.env`（gitignored），GitHub 侧在 repo secret；两处已同步更新。密钥值不放本文件。
+- LLM key：任意 OpenAI 兼容供应商，配置走 `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`（旧名 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` 仍生效，workflow 两者都透传）。默认 DeepSeek 官方；接入 OrcaRouter 例：`LLM_BASE_URL=https://api.orcarouter.ai/v1`，模型名带供应商前缀如 `deepseek/deepseek-chat`（`-free` 后缀是免费档，429 限流紧）。本地在项目根 `.env`（gitignored），CI 在 repo secrets。密钥值不放本文件。
 - 飞书 `FEISHU_WEBHOOK_URL` / `FEISHU_SECRET`：仅在 GitHub repo secret。
 - `XHS_COOKIE`（小红书）：仅本地 `.env`，微调发布脚本用。
 

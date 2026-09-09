@@ -34,8 +34,11 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 BEIJING_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
 
 # --- LLM ---
-LLM_API_KEY = env_str("DEEPSEEK_API_KEY")
-LLM_BASE_URL = env_str("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+# Any OpenAI-compatible provider. LLM_* names are preferred; DEEPSEEK_* work
+# as legacy aliases so existing secrets keep working without changes.
+# OrcaRouter: LLM_BASE_URL=https://api.orcarouter.ai/v1, LLM_MODEL=deepseek/deepseek-chat
+LLM_API_KEY = env_str("LLM_API_KEY") or env_str("DEEPSEEK_API_KEY")
+LLM_BASE_URL = env_str("LLM_BASE_URL") or env_str("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 LLM_MODEL = env_str("LLM_MODEL", "deepseek-chat")
 
 # --- Content Sources ---
@@ -80,7 +83,7 @@ def validate_config() -> None:
     """Fail fast with a clear message when required config is missing."""
     missing = []
     if not LLM_API_KEY:
-        missing.append("DEEPSEEK_API_KEY")
+        missing.append("LLM_API_KEY (or legacy DEEPSEEK_API_KEY)")
     if missing:
         raise SystemExit(
             "[config] missing required env vars: "

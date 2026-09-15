@@ -14,7 +14,7 @@
 
 ## 约定
 
-- 配置全走环境变量（`.env` 本地 / repo secrets CI），空值自动回退默认——workflow 只传真实存在的 secret
+- 配置全走环境变量（`.env` 本地 / repo secrets CI），空值自动回退默认——workflow 透传全部渠道 secret，未配置的为空、publish 时自动跳过
 - LLM 调用必须容错：单篇失败降级保留；**累计失败率 ≥50% 中止发布**（护栏）；封面图失败跳过
 - 0 新文章是正常日（exit 0），不是失败
 - 飞书签名算法特殊：HMAC key = `{timestamp}\n{secret}`，消息体为空，改 `_feishu_sign` 前先查官方文档
@@ -24,6 +24,7 @@
 
 - LLM key：任意 OpenAI 兼容供应商，配置走 `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`（旧名 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` 仍生效，workflow 两者都透传）。默认 DeepSeek 官方；接入 OrcaRouter 例：`LLM_BASE_URL=https://api.orcarouter.ai/v1`，模型名带供应商前缀如 `deepseek/deepseek-chat`（`-free` 后缀是免费档，429 限流紧）。本地在项目根 `.env`（gitignored），CI 在 repo secrets。密钥值不放本文件。
 - 飞书 `FEISHU_WEBHOOK_URL` / `FEISHU_SECRET`：仅在 GitHub repo secret。
+- Telegram `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHANNEL`、WordPress `WP_URL` / `WP_USER` / `WP_APP_PASSWORD`：可选渠道，仅在 repo secret（2026-09-15 修复：此前 workflow 未透传，配置了也不会生效）。
 - `XHS_COOKIE`（小红书）：仅本地 `.env`，微调发布脚本用。
 
 ## 本地运行与验证
@@ -50,4 +51,4 @@ cp .env.example .env   # 填 DEEPSEEK_API_KEY（必填）
 
 ## CI
 
-`.github/workflows/daily-digest.yml`。改动后用 `gh workflow run "AI DailyPulse"` 手动触发验证；schedule 长期不活跃会被 GitHub 自动禁用，用 `gh workflow enable` 恢复。artifact 含 `output/` 和 `data/raw_articles.json`（可下载后本地 `--process-only` 复现一期）。封面图会随每期自动提交到仓库 `covers/` 目录（保留最近 7 天），飞书消息里的图片链接即 `raw.githubusercontent.com/DanMo661/AI-DailyPulse/main/covers/...`。
+`.github/workflows/daily-digest.yml`。改动后用 `gh workflow run "AI DailyPulse"` 手动触发验证；schedule 长期不活跃会被 GitHub 自动禁用，用 `gh workflow enable` 恢复。artifact 含 `output/` 和 `data/raw_articles.json`（可下载后本地 `--process-only` 复现一期）。封面图会随每期自动提交到仓库 `covers/` 目录（保留最近 7 天），飞书/Telegram 消息里的图片链接经 `resolve_cover_urls` 替换为 jsDelivr CDN（`cdn.jsdelivr.net/gh/DanMo661/AI-DailyPulse@main/covers/...`，raw.githubusercontent 国内不可靠）。

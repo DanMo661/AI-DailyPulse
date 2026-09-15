@@ -42,6 +42,11 @@ jobs:
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+          WP_URL: ${{ secrets.WP_URL }}
+          WP_USER: ${{ secrets.WP_USER }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
         run: python src/main.py
 
       # Covers are referenced in the digest by relative name; CI pushes them to

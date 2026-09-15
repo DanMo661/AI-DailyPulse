@@ -49,6 +49,20 @@ cp .env.example .env   # 填 DEEPSEEK_API_KEY（必填）
 .venv/Scripts/python scripts/publish_xiaohongshu.py --auto     # 自动点发布（风险自负）
 ```
 
+## 公众号发布（手动粘贴模式，变现验证中）
+
+每期早报自动生成公众号排版 HTML（`src/wechat.py`，全内联样式，公众号编辑器直接吃）：
+
+```bash
+# CI 每期自动产出 output/wechat/YYYYMMDD_公众号.html（随 artifact 上传）
+# 人肉循环：下载 artifact → 浏览器打开 HTML → Ctrl+A/C → 粘贴到公众号后台 → 群发
+```
+
+- **阶段1（现在）**：手动粘贴验证内容（目标 4 周看阅读量/流量主）。注册个人订阅号免费，满 100 粉开流量主。
+- **阶段2（账号就绪后）**：API 自动发布（草稿箱/发布接口）。**坑：微信公众平台有 IP 白名单，GitHub Actions 动态 IP 过不了**——方案是改成家里常驻机定时任务（固定家庭 IP 加白）跑发布步骤，或继续手动。
+- 定位建议：先泛 AI 科技早报跑数据，差异化用"AI+硬件/嵌入式"垂类点评（用户领域优势）。
+- 密钥（阶段2 才需要）：`WECHAT_APPID` / `WECHAT_SECRET`，老规矩进 .env / repo secrets。
+
 ## CI
 
 `.github/workflows/daily-digest.yml`。改动后用 `gh workflow run "AI DailyPulse"` 手动触发验证；schedule 长期不活跃会被 GitHub 自动禁用，用 `gh workflow enable` 恢复。artifact 含 `output/` 和 `data/raw_articles.json`（可下载后本地 `--process-only` 复现一期）。封面图会随每期自动提交到仓库 `covers/` 目录（保留最近 7 天），飞书/Telegram 消息里的图片链接经 `resolve_cover_urls` 替换为 jsDelivr CDN（`cdn.jsdelivr.net/gh/DanMo661/AI-DailyPulse@main/covers/...`，raw.githubusercontent 国内不可靠）。

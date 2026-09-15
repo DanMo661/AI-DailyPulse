@@ -25,6 +25,7 @@ from config import (
     SOCIAL_OUTPUT,
     OUTPUT_DIR,
 )
+from wechat import save_wechat_html
 
 
 # ─── Telegram ───────────────────────────────────────────
@@ -265,8 +266,12 @@ def publish_all(digest: str, posts_map: dict):
     results = {}
     if os.environ.get("GITHUB_ACTIONS") == "true":
         publish_covers_to_repo()
-        digest = resolve_cover_urls(digest)
+    # CDN 图链对本地预览同样有用（正则幂等，重复替换无副作用）
+    digest = resolve_cover_urls(digest)
     today = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
+
+    # 0. WeChat paste-ready html (manual publish; API 自动化等账号就绪后接入)
+    results["wechat"] = save_wechat_html(digest)
 
     # 1. Feishu - instant push (digest only; social posts live in output files)
     results["feishu"] = publish_feishu(digest)

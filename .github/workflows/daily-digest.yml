@@ -2,8 +2,7 @@ name: AI DailyPulse
 
 on:
   schedule:
-    - cron: '0 0 * * *'     # UTC 00:00 = 北京时间 08:00 早报
-    - cron: '0 12 * * *'    # UTC 12:00 = 北京时间 20:00 晚报
+    - cron: '0 23 * * *'    # UTC 23:00 = 北京时间 07:00 早报（每天一期）
   workflow_dispatch:
 
 jobs:

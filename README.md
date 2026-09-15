@@ -17,7 +17,7 @@
 
 ## 它每天做什么
 
-每天北京时间 **08:00 / 20:00** 各跑一期，流程全在 GitHub Actions 里：
+每天北京时间 **07:00** 跑一期，流程全在 GitHub Actions 里：
 
 | 步骤 | 做什么 |
 |---|---|
@@ -66,7 +66,7 @@
    > 曾配置过旧名 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL`？仍然兼容，可不迁移。
 
 3. 进入 **Actions** 页，启用 workflow（GitHub 默认禁用 fork 仓库的定时任务），然后 **Run workflow** 手动跑一次验证
-4. 完成。之后每天 08:00 / 20:00 自动出刊
+4. 完成。之后每天北京时间 07:00 自动出刊
 
 **成本**：一期约 35 次 LLM 调用（30 篇筛选 + 1 次主编 + 5 平台文案），用 DeepSeek 官方 API 每期约几分钱，接免费档模型可做到 0 成本。
 
@@ -93,7 +93,7 @@ python src/main.py --collect-only     # 只抓取，不耗 LLM 额度
 ## 自定义
 
 - **信源**：`src/config.py` 的 `SOURCES` / `RSS_FEEDS`，任意 RSS 都能加
-- **出刊时间**：`.github/workflows/daily-digest.yml` 的 cron（现在是北京时间 08:00 / 20:00）
+- **出刊时间**：`.github/workflows/daily-digest.yml` 的 cron（现在是北京时间 07:00，即 UTC 23:00）
 - **选题标准与文风**：`src/process.py` 里的各个 PROMPT
 - **单期篇幅**：`src/config.py` 的 `MAX_TOTAL_ARTICLES`
 

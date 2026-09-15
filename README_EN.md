@@ -18,7 +18,7 @@
 
 ## What it does every day
 
-Two editions daily at **00:00 / 12:00 UTC**, entirely inside GitHub Actions:
+One edition daily at **23:00 UTC (07:00 Beijing time)**, entirely inside GitHub Actions:
 
 | Step | What happens |
 |---|---|
@@ -63,7 +63,7 @@ Guardrails: if ≥ 50% of the per-article filter calls fail, the edition aborts 
    | `WP_URL` + `WP_USER` + `WP_APP_PASSWORD` | channel | WordPress (saves as **draft**, never auto-publishes) |
 
 3. Open the **Actions** tab, enable the workflow (GitHub disables schedules on forks by default), then trigger **Run workflow** once to verify
-4. Done — issues go out automatically at 00:00 / 12:00 UTC
+4. Done — issues go out automatically every day at 23:00 UTC
 
 **Cost**: ~35 LLM calls per edition (30 per-article passes + 1 editor pass + 5 platform rewrites). On DeepSeek's official API that's single-digit cents; free-tier models bring it to zero.
 

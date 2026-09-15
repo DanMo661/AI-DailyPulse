@@ -1,6 +1,6 @@
 # AI DailyPulse
 
-全自动 AI/科技早报管线：采集 → LLM 精选 → blog 式早报 + 封面图 → 多渠道发布。GitHub Actions 每天北京时间 08:00 / 20:00 定时运行。
+全自动 AI/科技早报管线：采集 → LLM 精选 → blog 式早报 + 封面图 → 多渠道发布。GitHub Actions 每天北京时间 07:00 定时运行（cron 用 UTC 23:00）。
 
 ## 流程（v2：精选重点 + 头条 Blog）
 

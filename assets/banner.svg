@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="acc" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#58a6ff"/>
+      <stop offset="1" stop-color="#3fb950"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.22" r="0.75">
+      <stop offset="0" stop-color="#58a6ff" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#58a6ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="#0d1117"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+
+  <!-- heartbeat pulse -->
+  <path d="M0 130 H390 l16 -46 l22 92 l16 -46 H816 l16 -46 l22 92 l16 -46 H1280"
+        fill="none" stroke="url(#acc)" stroke-width="3" stroke-linejoin="round"
+        opacity="0.4"/>
+
+  <!-- title -->
+  <text x="640" y="268" text-anchor="middle"
+        font-family="'Segoe UI', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        font-size="96" font-weight="700" letter-spacing="1">
+    <tspan fill="url(#acc)">AI</tspan><tspan fill="#f0f6fc"> DailyPulse</tspan>
+  </text>
+
+  <text x="640" y="330" text-anchor="middle"
+        font-family="'Segoe UI', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        font-size="30" fill="#8b949e">全自动 AI 科技日报 · 零服务器 · GitHub Actions 免费跑</text>
+  <text x="640" y="368" text-anchor="middle"
+        font-family="'Segoe UI', -apple-system, sans-serif"
+        font-size="20" fill="#6e7681">Collect sources, curate with LLM, publish everywhere — on a schedule.</text>
+
+  <!-- pipeline -->
+  <g font-family="'Segoe UI', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+    <rect x="100" y="418" width="320" height="88" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <text x="260" y="455" text-anchor="middle" font-size="24" font-weight="600" fill="#e6edf3">采集 · Collect</text>
+    <text x="260" y="487" text-anchor="middle" font-size="16" fill="#8b949e">HN · ArXiv · dev.to · RSS</text>
+
+    <rect x="480" y="418" width="320" height="88" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <text x="640" y="455" text-anchor="middle" font-size="24" font-weight="600" fill="#e6edf3">策划 · Curate</text>
+    <text x="640" y="487" text-anchor="middle" font-size="16" fill="#8b949e">LLM 筛选 · 头条 · 多平台文案</text>
+
+    <rect x="860" y="418" width="320" height="88" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+    <text x="1020" y="455" text-anchor="middle" font-size="24" font-weight="600" fill="#e6edf3">发布 · Publish</text>
+    <text x="1020" y="487" text-anchor="middle" font-size="16" fill="#8b949e">飞书 · Telegram · WordPress</text>
+
+    <line x1="432" y1="462" x2="456" y2="462" stroke="#58a6ff" stroke-width="3"/>
+    <polygon points="456,454 470,462 456,470" fill="#58a6ff"/>
+    <line x1="812" y1="462" x2="836" y2="462" stroke="#58a6ff" stroke-width="3"/>
+    <polygon points="836,454 850,462 836,470" fill="#58a6ff"/>
+  </g>
+
+  <text x="640" y="580" text-anchor="middle"
+        font-family="Consolas, 'JetBrains Mono', monospace"
+        font-size="20" fill="#6e7681">github.com/DanMo661/AI-DailyPulse</text>
+</svg>

@@ -5,6 +5,7 @@ errors are retried with backoff so a single blip doesn't drop an article.
 """
 
 import json
+import re
 import time
 
 from openai import OpenAI
@@ -12,6 +13,8 @@ from openai import OpenAI
 from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
 
 _MAX_RETRIES = 2
+# a retry_after beyond this = provider capacity gone for hours; don't stall the run
+_MAX_RETRY_AFTER = 90
 
 _client = None
 
@@ -22,6 +25,20 @@ def _get_client() -> OpenAI:
     if _client is None:
         _client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
     return _client
+
+
+def _retry_wait(attempt: int, err: Exception) -> int | None:
+    """Seconds to wait before the next attempt, or None to give up.
+
+    Rate-limit bodies (e.g. OrcaRouter 429) carry retry_after_seconds: honor
+    it when it's short enough to stay inside the run window; a huge value
+    means the provider's capacity is out for hours — retrying is pointless.
+    """
+    m = re.search(r"retry_after_seconds['\"]?[:\s]+(\d+)", str(err))
+    if m:
+        wait = int(m.group(1))
+        return wait if wait <= _MAX_RETRY_AFTER else None
+    return 3 * (2 ** attempt)
 
 
 def chat(system: str, user: str, temperature: float = 0.3, max_tokens: int = 2000, json_mode: bool = False) -> str:
@@ -45,7 +62,9 @@ def chat(system: str, user: str, temperature: float = 0.3, max_tokens: int = 200
         except Exception as e:
             last_err = e
             if attempt < _MAX_RETRIES:
-                wait = 3 * (2 ** attempt)
+                wait = _retry_wait(attempt, e)
+                if wait is None:
+                    break  # provider out of capacity for hours — fail fast
                 print(f"[llm] attempt {attempt + 1} failed ({e}), retrying in {wait}s")
                 time.sleep(wait)
     raise last_err

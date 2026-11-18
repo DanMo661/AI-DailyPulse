@@ -7,6 +7,7 @@ from llm import chat, parse_json
 from config import (
     BEIJING_TZ,
     DIGEST_OUTPUT,
+    FILTER_WORKERS,
     LINK_PREFIX,
     POOL_FILE,
     SOCIAL_OUTPUT,
@@ -17,8 +18,8 @@ from config import (
 MAX_ERROR_RATIO = 0.5
 
 # v3 deadline: the publish run digests the whole pool (~40 articles) between
-# 07:50 and 08:00 Beijing, so per-article calls go through a thread pool
-FILTER_WORKERS = 4
+# 07:50 and 08:00 Beijing, so per-article calls go through a small thread pool
+# (config.FILTER_WORKERS — keep it low on free-tier providers that 429 hard)
 
 
 # ─── Step 1: Filter + Summarize (one LLM call per article, parallel) ──

@@ -81,6 +81,10 @@ MAX_TOTAL_ARTICLES = 30
 BATCH_SIZE = 10
 MAX_POOL_SIZE = 60
 
+# Parallel per-article LLM filter workers. Keep low: free-tier providers
+# (e.g. OrcaRouter -free) 429 aggressively under concurrency.
+FILTER_WORKERS = int(env_str("LLM_FILTER_WORKERS", "2"))
+
 # --- Publishing ---
 TELEGRAM_BOT_TOKEN = env_str("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL = env_str("TELEGRAM_CHANNEL")

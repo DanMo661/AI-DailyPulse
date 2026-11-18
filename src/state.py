@@ -5,6 +5,10 @@ data/seen_urls.json — md5 ids of every URL ever fetched (newest last, capped),
 data/pool.json      — articles collected but not yet published (v3 batch mode).
                       The publish job digests the whole pool, then clears it
                       only after Feishu confirms delivery.
+
+Corrupt files are quarantined (renamed *.corrupt) instead of crashing every
+future run — data/ rides the actions/cache, so an unhandled JSONDecodeError
+here would poison the pipeline until someone manually repairs the cache.
 """
 
 import json
@@ -16,11 +20,25 @@ from config import (
 )
 
 
+def _load_json_list(path) -> list:
+    """Load a JSON list file; quarantine corrupt files and start fresh."""
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        corrupt = path.with_suffix(path.suffix + ".corrupt")
+        path.rename(corrupt)
+        print(f"[state] WARNING: {path.name} was corrupt ({e}); "
+              f"quarantined as {corrupt.name}, starting fresh. "
+              f"seen 丢失=可能重推旧文一期；pool 丢失=今日早刊素材减少。")
+        return []
+
+
 def load_seen() -> list:
     """Load seen article ids, preserving order (oldest first)."""
-    if SEEN_URLS_FILE.exists():
-        return json.loads(SEEN_URLS_FILE.read_text(encoding="utf-8"))
-    return []
+    return _load_json_list(SEEN_URLS_FILE)
 
 
 def save_seen(seen: list):
@@ -29,9 +47,7 @@ def save_seen(seen: list):
 
 
 def load_pool() -> list:
-    if POOL_FILE.exists():
-        return json.loads(POOL_FILE.read_text(encoding="utf-8"))
-    return []
+    return _load_json_list(POOL_FILE)
 
 
 def save_pool(pool: list):

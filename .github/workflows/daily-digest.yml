@@ -11,6 +11,12 @@ on:
   schedule:
     - cron: '20 0 * * *'   # 兜底：北京 08:20
 
+# 07:50 (cron-job.org) 和 08:20 (fallback) 可能因 runner 排队撞车——
+# 排队串行化，后者完整走 guard，绝不并发双推
+concurrency:
+  group: daily-digest
+  cancel-in-progress: false
+
 jobs:
   digest:
     runs-on: ubuntu-latest
@@ -75,9 +81,10 @@ jobs:
         run: python src/main.py publish
 
       # One commit per day goes to the `archive` branch (digest + cover);
-      # main never receives bot commits.
+      # main never receives bot commits. hashFiles guards the "normal empty
+      # day" case (pool empty → nothing published → nothing to archive).
       - name: Archive daily edition
-        if: success() && steps.guard.outputs.skip != 'true'
+        if: success() && steps.guard.outputs.skip != 'true' && hashFiles('output/digest_*.md') != ''
         run: |
           TODAY=${{ steps.guard.outputs.today }}
           git config user.name "github-actions[bot]"

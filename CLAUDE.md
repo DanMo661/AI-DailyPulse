@@ -7,8 +7,8 @@
 | 时间 | 动作 | workflow | 触发 |
 |---|---|---|---|
 | 14:00 / 20:00 / 02:00 | 采集批次 1-3：每源轮询选 10 篇入 `data/pool.json`，不推送、不耗 LLM | `collect.yml` | GH cron（延迟无妨） |
-| 07:50 | 批次 4 采集 → 池内 ~40 篇 LLM 并行筛选（4 线程）→ 主编定稿 → 封面 → **推飞书** → 归档 | `daily-digest.yml` | **cron-job.org dispatch**（误差 ~1 分钟） |
-| 08:20 | 兜底重试：归档分支已有今日刊则 exit 0，绝不双推 | `daily-digest.yml` | GH cron `20 0 * * *` |
+| 07:50 | 批次 4 采集 → 池内 ~40 篇 LLM 并行筛选（`LLM_FILTER_WORKERS` 默认 2，免费档 429 严；付费 key 可调高）→ 主编定稿 → 封面 → **推飞书** → 归档 | `daily-digest.yml` | **cron-job.org dispatch**（误差 ~1 分钟） |
+| 08:20 | 兜底重试：飞书送达标记（`data/feishu_sent.json` 随 cache 持久化）或归档分支已有今日刊则 exit 0，绝不双推 | `daily-digest.yml` | GH cron `20 0 * * *` |
 
 ## 信息源（v3）
 
@@ -36,7 +36,7 @@
 
 ## 归档
 
-`archive` 分支，每天 1 个 bot commit：`archive/YYYYMMDD.md` + `covers/cover_*.jpg`，不再 7 天清理（每天 ~50KB）。**main 分支零 bot commit**。飞书/公众号里的图链走 jsDelivr `@archive` 分支（`publish.COVERS_CDN_BASE`；raw.githubusercontent 国内不可靠）。归档步骤 `if: success()`，只在飞书真送达后执行。
+`archive` 分支，每天 1 个 bot commit：`archive/YYYYMMDD.md` + `covers/cover_*.jpg`，不再 7 天清理（实测每天 ~150KB，封面 PNG 占大头）。**main 分支零 bot commit**（v3 起；v2 时代的历史 bot commit 与 main 上 `covers/` 目录残留未清）。飞书/公众号里的图链走 jsDelivr `@archive` 分支（`publish.COVERS_CDN_BASE`；raw.githubusercontent 国内不可靠）。归档步骤 `if: success()` + digest 文件存在性检查，只在飞书真送达后执行；workflow 顶层 `concurrency` 串行化 07:50/08:20 两个触发，杜绝并发双推。
 
 ## 本地运行与验证
 

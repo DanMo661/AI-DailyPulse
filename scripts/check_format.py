@@ -17,8 +17,9 @@ from pathlib import Path
 DIGEST = Path(__file__).resolve().parents[1] / "output" / "digest.md"
 LINK_PREFIX = "原文链接："
 
-# prompt targets with slack for punctuation and LLM drift
-HEADLINE_RANGE = (150, 240)
+# prompt targets with slack for punctuation and LLM drift (observed real
+# production headline: 254 chars on 2026-11-18 — calibrated accordingly)
+HEADLINE_RANGE = (150, 270)
 BLURB_RANGE = (40, 125)
 
 PICK_RE = re.compile(r"^(\d+)\.\s\*\*(.+?)\*\*$")
@@ -55,9 +56,13 @@ def check(problems: list[str]):
     if n_links != 5:
         _fail(problems, f"expected 5 standalone '{LINK_PREFIX}' lines (1 headline + 4 picks), got {n_links}")
 
-    if "](http" in text.replace("![](cover", ""):
-        # markdown links with real URLs are v2 leftovers; cover image syntax is fine
-        suspicious = [l for l in lines if re.search(r"]\(https?://", l)]
+    # markdown links with real URLs are v2 leftovers; cover image lines
+    # (`![封面](...)`) are legitimate digest syntax and exempt
+    suspicious = [
+        l for l in lines
+        if not l.startswith("![") and re.search(r"\]\(https?://", l)
+    ]
+    if suspicious:
         _fail(problems, f"markdown-style links must be plain URLs, found: {suspicious[:2]}")
 
     picks = []

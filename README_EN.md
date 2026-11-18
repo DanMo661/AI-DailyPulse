@@ -25,7 +25,7 @@ Four collection batches a day build a shared news pool (no pushes); the last bat
 | 14:00 | 📡 Batch 1: round-robin across ~12 sources (AIHOT, 量子位, HN, ArXiv, TechCrunch, The Verge…), 10 articles into the pool | GitHub Actions cron |
 | 20:00 | 📡 Batch 2 | GitHub Actions cron |
 | 02:00 | 📡 Batch 3 | GitHub Actions cron |
-| **07:50** | 📡 Batch 4 → 🔍 LLM-filters the ~40-article pool in parallel → 📝 one editor call (**1 headline ~200 chars + 4 picks, 50–100 chars each**) → 🖼️ og:image cover → 🚀 **Feishu push** → 🗄️ archive | External free cron (cron-job.org, ~1 min accuracy) |
+| **07:50** | 📡 Batch 4 → 🔍 LLM-filters the ~40-article pool in parallel → 📝 one editor call (**1 headline ~200 chars + 4 picks, 50–100 chars each**) → 🖼️ og:image cover → 🚀 **Feishu push** → 🗄️ archive | GitHub Actions (started 06:00, waits in-runner; ~1 min accuracy) |
 | 08:20 | Fallback retry: skips silently if today's edition is already archived — never double-pushes | GitHub Actions cron |
 
 Guardrails: if ≥ 50% of the per-article filter calls fail, the edition aborts (better no issue than a broken one); a missing cover never blocks the pipeline; a failed Feishu delivery keeps the pool for the 08:20 fallback.
@@ -62,9 +62,7 @@ Guardrails: if ≥ 50% of the per-article filter calls fail, the edition aborts 
    | `WP_URL` + `WP_USER` + `WP_APP_PASSWORD` | channel | WordPress (saves as **draft**, never auto-publishes) |
 
 3. Open the **Actions** tab, enable the workflow (GitHub disables schedules on forks by default), then trigger **Run workflow** once to verify
-4. **For punctual delivery**: GitHub's built-in cron drifts by hours, so create a free daily job on [cron-job.org](https://cron-job.org) at 07:50 Asia/Shanghai that POSTs to
-   `https://api.github.com/repos/<you>/AI-DailyPulse/actions/workflows/daily-digest.yml/dispatches` with header `Authorization: Bearer <fine-grained PAT, Actions: RW>` and body `{"ref":"main"}`
-5. Done — the Feishu push lands at **8:00 Beijing time** every morning
+4. Done — the Feishu push lands at **8:00 Beijing time** every morning, with **no external cron service needed**: the workflow is started by GitHub at 06:00 Beijing and waits in-runner until 07:50 to run precisely (free unlimited minutes on public repos)
 
 **Cost**: ~35 LLM calls per edition (30 per-article passes + 1 editor pass + 5 platform rewrites). On DeepSeek's official API that's single-digit cents; free-tier models bring it to zero.
 

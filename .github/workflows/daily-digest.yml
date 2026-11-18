@@ -9,10 +9,16 @@ name: AI DailyPulse
 on:
   workflow_dispatch:
   schedule:
-    - cron: '20 0 * * *'   # 兜底：北京 08:20
+    # 主触发：UTC 22:00（北京 06:00）启动，runner 内 sleep 到 UTC 23:50 = 07:50
+    # 精确执行。GitHub cron 的启动延迟（分钟级到数小时）被等待步吸收，
+    # public repo runner 不限时长免费。
+    - cron: '0 22 * * *'
+    # 兜底：北京 08:20。主运行已推完则 guard 直接跳过；主运行彻底没起来
+    # （GH cron 偶发丢班）则此时已过 23:50 UTC，立即执行补发。
+    - cron: '20 0 * * *'
 
-# 07:50 (cron-job.org) 和 08:20 (fallback) 可能因 runner 排队撞车——
-# 排队串行化，后者完整走 guard，绝不并发双推
+# 主/兜底两个触发可能因 runner 排队撞车——排队串行化，后者完整走 guard，
+# 绝不并发双推
 concurrency:
   group: daily-digest
   cancel-in-progress: false
@@ -20,7 +26,7 @@ concurrency:
 jobs:
   digest:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 300   # 等待步最长 ~2h + 管线 ~6min
     permissions:
       contents: write
     steps:
@@ -35,6 +41,24 @@ jobs:
           key: seen-urls-${{ github.run_id }}
           restore-keys: |
             seen-urls-
+
+      # 手动 dispatch 不等待（也是未来接外部 cron 服务的入口）；
+      # schedule 触发则睡到北京 07:50。启动太晚（>23:50 UTC）或等待超 6h
+      # （说明 target 已是明天）则立即执行，宁可稍晚不出空窗。
+      - name: Wait until 07:50 Beijing
+        if: github.event_name == 'schedule'
+        run: |
+          TARGET=$(date -u -d '23:50' +%s)
+          NOW=$(date -u +%s)
+          WAIT=$((TARGET - NOW))
+          if [ $WAIT -le 0 ]; then
+            echo "already past 07:50 Beijing — running now"
+          elif [ $WAIT -gt 21600 ]; then
+            echo "target $(date -u -d "@$TARGET" '+%F %T')Z would wait ${WAIT}s (>6h cap) — running now"
+          else
+            echo "sleeping ${WAIT}s until $(date -u -d "@$TARGET" '+%F %T')Z = 07:50 Beijing"
+            sleep $WAIT
+          fi
 
       - name: Skip if today's edition was already delivered
         id: guard

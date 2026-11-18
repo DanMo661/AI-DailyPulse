@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import timedelta, timezone
 from pathlib import Path
 
@@ -11,7 +12,10 @@ if _env_file.exists():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             key, _, val = line.partition("=")
-            os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+            # strip inline comments (`KEY=value  # note`) — .env.example shows
+            # this style and a trailing `# note` inside the value breaks APIs
+            val = re.sub(r"\s+#.*$", "", val).strip().strip('"').strip("'")
+            os.environ.setdefault(key.strip(), val)
 
 
 def env_str(key: str, default: str = "") -> str:
@@ -75,7 +79,7 @@ MAX_ARTICLES_PER_SOURCE = 10
 MAX_TOTAL_ARTICLES = 30
 
 # --- v3 batch collection ---
-# v3 cadence: 4 collection batches a day (14:00/20:02/02:00/07:50 Beijing),
+# v3 cadence: 4 collection batches a day (14:00/20:00/02:00/07:50 Beijing),
 # each appends BATCH_SIZE articles to the pending pool; the last batch runs
 # inside the publish job which then digests the whole pool.
 BATCH_SIZE = 10

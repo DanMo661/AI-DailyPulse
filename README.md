@@ -44,7 +44,7 @@
 >
 >    原文链接：https://arstechnica.com/gadgets/2026/11/microsoft-calls-copilot-the-new-os-for-work-at-ignite-keynote/
 >
-> *（节选，完整一期见 `output/digest.md`）*
+> *（节选，完整一期及配套多平台文案见 [docs/example_digest.md](docs/example_digest.md)，均为真实产出）*
 
 文字与链接分两段、无任何 AI 标注，直接复制粘贴即可发布；配套的小红书 / 知乎 / 抖音文案与公众号排版 HTML 每期自动生成。
 

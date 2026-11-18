@@ -52,8 +52,9 @@ def parse_cookie(cookie_str: str):
 
 
 def extract_headline(md: str) -> tuple[str, str]:
-    """Extract (title, body) from the digest's headline section."""
-    m = re.search(r"### (.+?)\n\n(.+?)\n+\[原文链接\]", md, re.DOTALL)
+    """Extract (title, body) from the digest's headline section (v3 format:
+    body paragraph, optional cover image, then a `原文链接：<url>` line)."""
+    m = re.search(r"### (.+?)\n\n(.+?)\n+原文链接：", md, re.DOTALL)
     if not m:
         raise SystemExit("无法从 digest.md 解析头条标题/正文，请检查文件格式")
     title = m.group(1).strip()

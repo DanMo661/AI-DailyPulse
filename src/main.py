@@ -55,8 +55,8 @@ def cmd_collect() -> int:
 
 
 def cmd_publish(dry_run: bool) -> int:
+    validate_config()  # fail fast before wasting a network collection run
     collect_batch()  # the day's final batch joins the pool before digesting
-    validate_config()
     pool = load_pool()
     if not pool:
         print("  Pool empty — nothing to publish (normal day).")
@@ -74,8 +74,8 @@ def cmd_publish(dry_run: bool) -> int:
 
 
 def cmd_full(dry_run: bool) -> int:
-    articles = collect_all()
     validate_config()
+    articles = collect_all()
     if not articles:
         print("  Nothing collected — skipping publish (normal day).")
         return 0

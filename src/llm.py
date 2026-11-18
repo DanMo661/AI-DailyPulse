@@ -15,6 +15,8 @@ from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
 _MAX_RETRIES = 2
 # a retry_after beyond this = provider capacity gone for hours; don't stall the run
 _MAX_RETRY_AFTER = 90
+# permanent client errors — retrying only burns the per-article time budget
+_NO_RETRY_STATUS = {400, 401, 403, 404}
 
 _client = None
 
@@ -61,6 +63,8 @@ def chat(system: str, user: str, temperature: float = 0.3, max_tokens: int = 200
             return resp.choices[0].message.content
         except Exception as e:
             last_err = e
+            if getattr(e, "status_code", None) in _NO_RETRY_STATUS:
+                break  # bad key / bad request — retries cannot help
             if attempt < _MAX_RETRIES:
                 wait = _retry_wait(attempt, e)
                 if wait is None:

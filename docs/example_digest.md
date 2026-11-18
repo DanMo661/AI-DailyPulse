@@ -1,71 +1,69 @@
-# 示例：2026-09-03 期（真实产出）
-
-> 本文件是一次真实运行的原样产出（仅图片路径调整为仓库内相对路径），用于展示最终效果。
-
----
-
-# 🤖 AI DailyPulse | 2026年09月03日
+# 🤖 AI DailyPulse | 2026年11月18日
 
 ## 🔥 今日头条
 
-### Claude Fable 5.1 发布，新基准测试成绩亮眼
+### 微软把Office搬进Copilot，称其为工作新OS
 
-Anthropic 今日发布 Claude Fable 5.1，在 Terminal-Bench-Science 0.1 基准测试中取得 52.6% 的得分，官方宣称其在编码和知识工作能力上均有显著提升。这一版本被视为 Anthropic 在 AI 模型竞赛中的又一重要布局，有望进一步巩固其在专业领域的应用优势。
+微软在Ignite主题演讲中给出一个颇具野心的定位：Copilot是“工作的新操作系统”，而Word、Excel、PowerPoint如今已经直接内嵌其中。这意味着用户不再只是在一个侧边栏里调用AI助手，而是把文档、表格与演示文稿的生产流程整体搬进Copilot的界面之内。微软同时透露，下一步将推出常驻的AI agent，让助手从被动响应转向持续在岗。这一动作把Copilot从附加功能升级为承载办公套件的入口，也意味着微软与办公软件生态的竞争逻辑正在改变：争夺的不再是单个应用，而是用户每天工作的主界面。
 
-![封面](../covers/cover_20260903.webp)
 
-[原文链接](https://simonwillison.net/2026/Sep/1/claude-fable-5-1/)
+![封面](https://cdn.jsdelivr.net/gh/DanMo661/AI-DailyPulse@archive/covers/cover_20261118.png)
+
+原文链接：https://arstechnica.com/gadgets/2026/11/microsoft-calls-copilot-the-new-os-for-work-at-ignite-keynote/
 
 ## 📌 其他重点
 
-1. **Claude 新系统提示词严防歌词复制**（[原文](https://simonwillison.net/2026/Sep/2/claudes-new-system-prompt/)）— Anthropic 公开 Claude 消费应用系统提示词及历史变更，新增明确禁止复现歌曲歌词的条款，以规避版权风险。
-2. **CERN 工业计算机从 RHEL 迁移至 Debian**（[原文](https://www.phoronix.com/news/CERN-Goes-Debian-Leaving-RHEL)）— 长期使用 RHEL 的 CERN 宣布将工业计算机系统迁移至 Debian，此举可能对开源生态和工业计算领域产生深远影响。
-3. **Python 3.15 候选版 2 发布**（[原文](https://simonwillison.net/2026/Sep/1/python-315-rc-2/)）— Python 3.15 进入候选阶段，仅允许修复 bug，正式版预计 10 月发布，开发者可提前测试新特性。
-4. **Paint.NET 在 WINE 上重写 Direct2D 实现跨平台**（[原文](https://simonwillison.net/2026/Sep/2/rick-brewster/)）— Paint.NET 团队从零重写 Direct2D 以支持 WINE，解决了跨平台的最大障碍，为 Windows 应用迁移提供了新思路。
+1. **纳德拉称自己已“AGI-pilled”，关注其对经济与政治的影响**
 
-> 📬 AI 自动生成
+微软CEO纳德拉公开表示自己已“AGI-pilled”，并把关注点放在AGI对经济结构与政治的影响上。作为全球最大AI公司之一的掌舵者，这一表态释放出微软正按AGI即将到来做长期布局的信号。
 
----
+原文链接：https://www.theverge.com/tech/1036111/satya-nadella-says-hes-agi-pilled-now
 
-# 附：头条自动改写的多平台文案（同一期真实产出）
+2. **LynnReal-Hand：用手势直接操控视频世界模型**
 
-## 小红书
+新研究提出用手部动作直接操控视频世界模型中的物体交互，兼顾精确交互建模与高效流式推理。它把手势变成世界模型的直接输入接口，为更自然的人机交互与可控视频生成提供了新路径。
 
-家人们！Claude又放大招了🚀 Fable 5.1刚发布，直接刷新了Terminal-Bench-Science基准测试记录，52.6%的得分属实有点东西。这波更新主打编码和知识工作，感觉专业打工人要换新装备了👀
+原文链接：https://arxiv.org/abs/2611.21479v2
 
-| 性能炸裂 | 52.6%的得分直接登顶，比上一代提升明显，实验室场景下表现尤其亮眼🧪  
-| 编码更懂你 | 复杂代码逻辑处理更丝滑，debug和重构能力据说有质的飞跃，写代码像开了外挂⚡️  
-| 知识工作升级 | 长文档分析、信息整合更精准，整理资料写报告的时间能省一半⏰  
-| 专业场景稳了 | 明显是针对科研、工程这类硬核场景优化的，普通聊天只是开胃菜🍜  
+3. **圆桌讨论：探索认知永生的可能路径**
 
-这波更新真的卷，感觉Anthropic是铁了心要抢专业市场。想尝鲜的姐妹可以去官网试试，反正我已经在排队了😤
+MIT科技评论圆桌探讨技术能否让大脑在死后继续运作，涉及脑机接口以及渐进式大脑替换等多种路径。讨论把“认知永生”从科幻话题拉进技术可行性与伦理边界的现实辩论。
 
-#Claude #AI工具 #人工智能 #程序员日常
+原文链接：https://www.technologyreview.com/2026/11/17/1148049/roundtables-inside-the-quest-for-cognitive-immortality/
 
-## 知乎
+4. **实测27个前沿LLM运行文本游戏的真实成本**
 
-Anthropic 今日发布的 Claude Fable 5.1，在 Terminal-Bench-Science 0.1 基准测试中拿下 52.6% 的分数，这个数字本身并不惊艳——毕竟 Science 类任务的核心是严谨推理而非代码冲刺——但真正值得玩味的，是官方"提升编码和知识工作能力"的表述背后，Anthropic 正在押注一条与 OpenAI 截然不同的产品哲学：**不追求通用智能的广度，而是死磕专业场景的深度**。
+作者用真实文本游戏数据实测27个前沿模型的token用量，揭示输入、缓存与输出token的定价结构让长期成本难以预估。对打算把LLM接入长期运行应用的开发者来说，这是一份难得的成本参考。
 
-我的判断是，这个 52.6% 的含金量被严重低估了。Terminal-Bench-Science 考察的是模型在真实终端环境下的科学计算、数据处理和工具调用能力，这意味着它测试的不是"能写多少行代码"，而是"能否在无人工干预下完成一个完整的科研工作流"。……
-
-但我也必须泼一盆冷水：Anthropic 宣称的"显著提升"需要打折扣看待。基准测试的设计者往往就是模型厂商自己或利益相关方，Terminal-Bench-Science 0.1 是全新基准，缺乏第三方复现，52.6% 的基线是否具有跨版本可比性尚未可知。……
-
-*（节选）*
-
-## Telegram
-
-🔥 Claude Fable 5.1 发布，新基准成绩亮眼
-
-📝 Anthropic 推出 Fable 5.1，Terminal-Bench-Science 0.1 得分 52.6%，编码与知识工作能力显著提升，巩固专业领域优势。
-
-🔗 https://simonwillison.net/2026/Sep/1/claude-fable-5-1/
-
-## 抖音口播
-
-家人们，AI圈又炸了！Claude Fable 5.1刚发布，直接干到52.6分，把科学任务当游戏刷，编码和知识活儿全升级——这波操作，Anthropic是要抢程序员饭碗啊！
-想不想看它怎么吊打其他模型？评论区扣"5.1"，我下期给你拆透！
-#Claude #AI新版本 #科技前沿
+原文链接：https://dev.to/hiper2d/how-much-does-it-cost-to-run-a-text-game-with-llms-57o7
 
 ---
 
-*以上知乎/Telegram/抖音文案为原始输出节选，均为流水线自动生成、未经人工修改。*
+## 附：头条自动改写的多平台文案（同一期真实产出）
+
+**公众号段落**
+
+> 微软在 Ignite 主题演讲中给出一个颇具野心的定位：Copilot 是"工作的新操作系统"，而 Word、Excel、PowerPoint 如今已直接内嵌其中。这意味着用户不再只是从侧边栏调用 AI 助手，而是把文档、表格与演示文稿的生产流程整体搬进 Copilot 界面之内。微软同时透露，下一步将推出常驻 AI agent，让助手从被动响应转向持续在岗。
+
+**小红书**
+
+> 微软在Ignite大会上放话：Copilot 就是「工作的新操作系统」，Word、Excel、PPT 全被塞进去了，办公入口要变天！🔄
+>  | 套件内嵌 | Word、Excel、PowerPoint 现已直接集成进 Copilot 界面，不再是侧边栏调 AI，而是整个生产流程搬进 Copilot 里 🗂️
+>  | 常驻 Agent | 微软透露下一步推出常驻 AI agent，助手从「你问我才答」变成「一直在线值班」⏰
+>  | 入口之争 | Copilot 从附加功能升级为办公套件主入口，竞争逻辑变了：抢的不是单个应用，而是主界面 👑
+
+**知乎**
+
+> 微软在Ignite上把Copilot称作"工作的新操作系统"，这个措辞值得认真对待——它不是营销修辞，而是一次入口层级的重新划分。过去Copilot是挂在Office侧边栏的助手，用户的主界面仍是Word、Excel、PowerPoint；现在微软把这三件套直接内嵌进Copilot，生产流程整体搬进AI界面之内。
+
+**Telegram**
+
+> 🔥 微软把Office搬进Copilot，称其为"工作新OS"
+> 📝 Word、Excel、PowerPoint已内嵌Copilot，下一步推常驻AI agent，争夺用户每日工作主界面。
+> 🔗 https://arstechnica.com/gadgets/2026/11/microsoft-calls-copilot-the-new-os-for-work-at-ignite-keynote/
+
+**抖音口播**
+
+> 微软这次玩大了！Office直接搬进Copilot，Word、Excel、PPT全塞进去了。以后不是你在侧边栏喊AI帮忙，而是整个工作流都在Copilot里跑。更狠的是，他们还要搞常驻AI agent，24小时在线待命。这哪是加功能啊，这是要抢你每天工作的主界面！
+> 你觉得这波操作能成吗？评论区聊聊。
+> #微软Copilot #Office #AI办公

@@ -17,11 +17,17 @@ from config import (
     FEISHU_WEBHOOK_URL,
     FEISHU_SECRET,
     BEIJING_TZ,
+    DATA_DIR,
     DIGEST_OUTPUT,
     SOCIAL_OUTPUT,
     OUTPUT_DIR,
 )
 from wechat import save_wechat_html
+
+# written when Feishu confirms delivery; lives in data/ so the actions/cache
+# carries it across runs — the workflow's double-push guard reads it when the
+# archive push itself failed (otherwise the 08:20 fallback would push again)
+FEISHU_SENT_FILE = DATA_DIR / "feishu_sent.json"
 
 
 # ─── Telegram ───────────────────────────────────────────
@@ -117,6 +123,9 @@ def _feishu_sign(timestamp: str, secret: str) -> str:
 
 def _markdown_to_feishu_text(md: str) -> str:
     """Convert basic markdown to Feishu-friendly plain text."""
+    # drop image lines first — feishu text messages can't render them and the
+    # link rule below would otherwise mangle `![封面](url)` into `!封面 (url)`
+    md = re.sub(r'!\[[^\]]*\]\([^)]*\)\s*', '', md)
     # remove heading markers, keep text
     md = re.sub(r'^#+\s*', '', md, flags=re.MULTILINE)
     # bold: **text** -> 【text】
@@ -252,6 +261,12 @@ def publish_all(digest: str, posts_map: dict, dry_run: bool = False):
     # 4. Save for manual review (WeChat, XHS, Zhihu)
     save_manual_posts(posts_map)
     save_daily_files(digest)
+
+    # 5. Delivery marker for the workflow's double-push guard (only on real
+    # confirmed Feishu success)
+    if results.get("feishu") is True:
+        today_bj = datetime.now(BEIJING_TZ).strftime("%Y%m%d")
+        FEISHU_SENT_FILE.write_text(json.dumps({"date": today_bj}), encoding="utf-8")
 
     return results
 

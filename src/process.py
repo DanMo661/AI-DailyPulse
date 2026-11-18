@@ -319,9 +319,10 @@ def process_pool(articles: list[dict]):
 
     # Step 1: filter + summarize (parallel)
     articles, errors = process_articles(articles)
-    total = len(articles) + errors
-    if total and errors / total >= MAX_ERROR_RATIO:
-        return {"abort": f"{errors}/{total} LLM calls failed (invalid API key or quota?)"}
+    # NB: `articles` (kept) already includes fallback-padded error articles, so
+    # the denominator is exactly the number of articles that entered filtering
+    if articles and errors / len(articles) >= MAX_ERROR_RATIO:
+        return {"abort": f"{errors}/{len(articles)} LLM calls failed (invalid API key or quota?)"}
     if not articles:
         print("[process] all articles filtered out")
         return None

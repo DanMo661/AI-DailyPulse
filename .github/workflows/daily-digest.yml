@@ -20,25 +20,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Skip if today's edition is already archived
-        id: guard
-        run: |
-          TODAY=$(TZ=Asia/Shanghai date +%Y%m%d)
-          echo "today=$TODAY" >> "$GITHUB_OUTPUT"
-          git fetch origin archive --quiet 2>/dev/null || true
-          if git cat-file -e "origin/archive:archive/$TODAY.md" 2>/dev/null; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "today's edition already published and archived — skipping"
-          fi
-
+      # restored BEFORE the guard so the guard can read the feishu delivery
+      # marker written into data/ by a previous successful publish run
       - name: Restore data cache
-        if: steps.guard.outputs.skip != 'true'
         uses: actions/cache@v4
         with:
           path: data/
           key: seen-urls-${{ github.run_id }}
           restore-keys: |
             seen-urls-
+
+      - name: Skip if today's edition was already delivered
+        id: guard
+        run: |
+          TODAY=$(TZ=Asia/Shanghai date +%Y%m%d)
+          echo "today=$TODAY" >> "$GITHUB_OUTPUT"
+          if [ -f data/feishu_sent.json ] && grep -q "$TODAY" data/feishu_sent.json; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "feishu already delivered today (marker) — skipping"
+            exit 0
+          fi
+          git fetch origin archive --quiet 2>/dev/null || true
+          if git cat-file -e "origin/archive:archive/$TODAY.md" 2>/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "today's edition already published and archived — skipping"
+          fi
 
       - uses: actions/setup-python@v5
         if: steps.guard.outputs.skip != 'true'
@@ -100,6 +106,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: daily-digest-output
+          if-no-files-found: ignore
           path: |
             output/
             data/pool.json

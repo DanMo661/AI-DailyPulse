@@ -145,6 +145,10 @@ def fetch_rss(url):
     articles = []
     try:
         feed = feedparser.parse(url)
+        # feedparser swallows network/XML errors into bozo instead of raising —
+        # surface them or a dead source is indistinguishable from a quiet one
+        if getattr(feed, "bozo", False) and not feed.entries:
+            raise RuntimeError(f"feed error: {getattr(feed, 'bozo_exception', 'unparsable')}")
         source = feed.feed.get("title", url)
         for entry in feed.entries[:MAX_ARTICLES_PER_SOURCE]:
             link = entry.get("link", "")

@@ -5,8 +5,8 @@
   [![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
   [![License: MIT](https://img.shields.io/badge/license-MIT-3fb950.svg)](LICENSE)
 
-  **全自动 AI 科技日报** —— 抓取 HN / ArXiv / dev.to / 技术 RSS，LLM 筛选改写并策划成一期早报，
-  自动推送飞书 / Telegram / WordPress，并生成公众号 / 小红书 / 知乎 / 抖音文案。
+  **全自动 AI 科技日报** —— 一天 4 批采集攒新闻池（AIHOT / 量子位 / HN / ArXiv / TechCrunch / The Verge 等 12 源），
+  每天早上 **8 点准时**把 LLM 策划的一期早报推到飞书，并生成公众号 / 小红书 / 知乎 / 抖音文案。
 
   Fork + 填几个 Secret，GitHub Actions 免费跑，**零服务器**。
 
@@ -17,33 +17,36 @@
 
 ## 它每天做什么
 
-每天北京时间 **07:00** 跑一期，流程全在 GitHub Actions 里：
+一天 4 批采集、只攒池不推送；最后一批汇总挑选后出刊（北京时间）：
 
-| 步骤 | 做什么 |
-|---|---|
-| 📡 采集 | 并行抓 HN、ArXiv cs.AI、dev.to、hnrss、TechCrunch、Simon Willison、lobste.rs 等约 30 篇，URL 去重 |
-| 🔍 筛选 | LLM 逐篇判定相关性：拒营销软文和噪音，留下的生成中文标题 + 核心要点 |
-| 📝 策划 | 一次"主编"调用：选出 **1 篇头条**（120~180 字正文）+ **4 篇重点**，写成早报 |
-| 🖼️ 配图 | 自动抓头条原文的 `og:image` 作为封面，随每期归档到 `covers/` |
-| 📣 文案 | 头条自动改写成 5 个平台风格的文案（公众号 / 小红书 / 知乎 / Telegram / 抖音） |
-| 🚀 发布 | 飞书整期推送 · Telegram 分段推送 · WordPress 存草稿 · 其余平台存文件人工发 |
+| 时间 | 做什么 | 触发方式 |
+|---|---|---|
+| 14:00 | 📡 采集批次 1：每源轮询选 10 篇入池，去重不推送 | GitHub Actions cron |
+| 20:00 | 📡 采集批次 2 | GitHub Actions cron |
+| 02:00 | 📡 采集批次 3 | GitHub Actions cron |
+| **07:50** | 📡 批次 4 → 🔍 池内 ~40 篇 LLM 并行筛选 → 📝 主编定稿（**1 头条 200 字 + 4 重点 50~100 字**）→ 🖼️ 抓头条 og:image 封面 → 🚀 **推飞书** → 🗄️ 归档 | 外部免费 cron（cron-job.org，误差 ~1 分钟） |
+| 08:20 | 兜底重试：今日已出刊则直接跳过，绝不双推 | GitHub Actions cron |
 
-护栏：单篇筛选的 LLM 调用失败率 ≥ 50% 时当期自动中止（宁可不出刊，不推半成品）；抓不到封面不阻塞流程。
+采集覆盖 AIHOT（卡兹克 925 信源 LLM 精选，官方 API）、量子位、HN、ArXiv、TechCrunch、Simon Willison、The Verge、Ars Technica、MIT Tech Review 等，按源轮询取样防单源刷屏。
+
+护栏：单篇筛选的 LLM 调用失败率 ≥ 50% 时当期自动中止（宁可不出刊，不推半成品）；抓不到封面不阻塞流程；飞书发送失败自动保留新闻池，08:20 兜底重试。
 
 ## 效果预览（真实产出，非摆拍）
 
-> ### Claude Fable 5.1 发布，新基准测试成绩亮眼
+> ### 黄仁勋退出英伟达，董事会决定不恢复CEO职务
 >
-> Anthropic 今日发布 Claude Fable 5.1，在 Terminal-Bench-Science 0.1 基准测试中取得 52.6% 的得分，官方宣称其在编码和知识工作能力上均有显著提升……
+> 英伟达创始人黄仁勋的离开仍在发酵。TechCrunch 报道，该公司私人投资组合在九个月内接近翻三倍，膨胀至约 650 亿美元；代理 CEO Colette Kress 则表示，董事会不会恢复黄仁勋的 CEO 职务，此前董事会已一致接受其辞职，无意让其复任。创始人离场后，英伟达这些年重金押注的初创企业网络何去何从、未来投资交易能否延续，成为市场和投资人密切关注的焦点……
 >
 > **📌 其他重点**
-> 1. **Claude 新系统提示词严防歌词复制** — Anthropic 公开 Claude 消费应用系统提示词及历史变更，新增明确禁止复现歌曲歌词的条款，以规避版权风险。
-> 2. **CERN 工业计算机从 RHEL 迁移至 Debian** — 长期使用 RHEL 的 CERN 宣布将工业计算机系统迁移至 Debian，此举可能对开源生态和工业计算领域产生深远影响。
-> 3. **Python 3.15 候选版 2 发布** — Python 3.15 进入候选阶段，仅允许修复 bug，正式版预计 10 月发布。
+> 1. **Copilot 成"新工作 OS"，Office 应用全面入驻**
 >
-> *（节选，完整一期见 [docs/example_digest.md](docs/example_digest.md)）*
+>    微软 Ignite 大会上将 Copilot 定义为"新的工作操作系统"，Word、Excel、PowerPoint 已可直接在 Copilot 内运行，并计划推出常驻型 AI 代理。办公入口正从传统应用转向 AI 原生工作台，竞争格局或随之改变。
+>
+>    原文链接：https://arstechnica.com/gadgets/2026/11/microsoft-calls-copilot-the-new-os-for-work-at-ignite-keynote/
+>
+> *（节选，完整一期见 `output/digest.md`）*
 
-配套的小红书文案、知乎文案等自动生成产物，见 [docs/example_digest.md](docs/example_digest.md) 末尾。
+文字与链接分两段、无任何 AI 标注，直接复制粘贴即可发布；配套的小红书 / 知乎 / 抖音文案与公众号排版 HTML 每期自动生成。
 
 ## 5 分钟上手
 
@@ -66,9 +69,14 @@
    > 曾配置过旧名 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL`？仍然兼容，可不迁移。
 
 3. 进入 **Actions** 页，启用 workflow（GitHub 默认禁用 fork 仓库的定时任务），然后 **Run workflow** 手动跑一次验证
-4. 完成。之后每天北京时间 07:00 自动出刊
+4. **准时出刊的关键**：GitHub 自带 cron 会随机延迟数小时，所以在 [cron-job.org](https://cron-job.org)（免费）建一个每天 07:50（Asia/Shanghai）的任务，POST 调用 GitHub API 触发出刊：
+   - 先建一个 Fine-grained PAT：仅本仓库，权限 `Actions: Read and write`
+   - URL：`https://api.github.com/repos/<你的用户名>/AI-DailyPulse/actions/workflows/daily-digest.yml/dispatches`
+   - Headers：`Authorization: Bearer <PAT>`、`Accept: application/vnd.github+json`、`User-Agent: cron`
+   - Body：`{"ref":"main"}`
+5. 完成。之后每天北京时间 **8 点**准时收到飞书推送
 
-**成本**：一期约 35 次 LLM 调用（30 篇筛选 + 1 次主编 + 5 平台文案），用 DeepSeek 官方 API 每期约几分钱，接免费档模型可做到 0 成本。
+**成本**：一期约 46 次 LLM 调用（40 篇筛选 + 1 次主编 + 5 平台文案），用 DeepSeek 官方 API 每期约几分钱，接免费档模型可做到 0 成本。
 
 ### 本地运行（可选）
 
@@ -76,8 +84,10 @@
 python -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env    # 填入 LLM_API_KEY
-python src/main.py                    # 全流程
-python src/main.py --collect-only     # 只抓取，不耗 LLM 额度
+python src/main.py collect            # 采集一批入池（无需 LLM key，不推送）
+python src/main.py publish --dry-run  # 消化池子产出全部产物，不真实推送
+python src/main.py publish            # 真实推送飞书并清空池子
+python src/main.py full               # 旧版一次性全流程（本地测试用）
 ```
 
 ## 发布渠道一览
@@ -92,10 +102,12 @@ python src/main.py --collect-only     # 只抓取，不耗 LLM 额度
 
 ## 自定义
 
-- **信源**：`src/config.py` 的 `SOURCES` / `RSS_FEEDS`，任意 RSS 都能加
-- **出刊时间**：`.github/workflows/daily-digest.yml` 的 cron（现在是北京时间 07:00，即 UTC 23:00）
+- **信源**：`src/config.py` 的 `SOURCES` / `RSS_FEEDS` / `AIHOT_API_URL`，任意 RSS 都能加
+- **采集节奏**：`collect.yml` 的 cron（默认 14/20/02 点三批 + 早刊批次 4）与 `BATCH_SIZE`（每批篇数）
+- **出刊时间**：cron-job.org 任务时间（主）+ `daily-digest.yml` 兜底 cron（辅），两者保持 ~30 分钟间隔
 - **选题标准与文风**：`src/process.py` 里的各个 PROMPT
-- **单期篇幅**：`src/config.py` 的 `MAX_TOTAL_ARTICLES`
+- **单期篇幅**：`src/config.py` 的 `BATCH_SIZE` / `MAX_POOL_SIZE`
+- **格式规范**：改格式需同步 `process.assemble_digest`、`wechat.digest_to_wechat_html`、`scripts/check_format.py` 三处
 
 ## FAQ
 

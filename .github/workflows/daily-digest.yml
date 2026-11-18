@@ -1,9 +1,15 @@
 name: AI DailyPulse
 
+# v3 publish run: final collection batch + digest the whole pool + Feishu push
+# + archive. Punctual 08:00 Beijing delivery is driven by an external cron
+# service (cron-job.org) dispatching this workflow at 07:50; the GH schedule
+# below is only a fallback because GH cron can start hours late. The guard
+# step makes double pushes impossible: if today's edition is already on the
+# `archive` branch, the fallback run exits without touching anything.
 on:
-  schedule:
-    - cron: '0 23 * * *'    # UTC 23:00 = 北京时间 07:00 早报（每天一期）
   workflow_dispatch:
+  schedule:
+    - cron: '20 0 * * *'   # 兜底：北京 08:20
 
 jobs:
   digest:
@@ -14,11 +20,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # seen_urls.json lives in data/ (gitignored) — cache it so articles
-      # aren't re-collected and re-published on every run.
-      # Key includes run_id so the cache always re-saves with updated state;
-      # restore-keys pulls the most recent previous cache.
-      - name: Restore seen URLs cache
+      - name: Skip if today's edition is already archived
+        id: guard
+        run: |
+          TODAY=$(TZ=Asia/Shanghai date +%Y%m%d)
+          echo "today=$TODAY" >> "$GITHUB_OUTPUT"
+          git fetch origin archive --quiet 2>/dev/null || true
+          if git cat-file -e "origin/archive:archive/$TODAY.md" 2>/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "today's edition already published and archived — skipping"
+          fi
+
+      - name: Restore data cache
+        if: steps.guard.outputs.skip != 'true'
         uses: actions/cache@v4
         with:
           path: data/
@@ -27,18 +41,22 @@ jobs:
             seen-urls-
 
       - uses: actions/setup-python@v5
+        if: steps.guard.outputs.skip != 'true'
         with:
           python-version: '3.12'
 
       - name: Install dependencies
+        if: steps.guard.outputs.skip != 'true'
         run: pip install -r requirements.txt
 
-      - name: Run digest pipeline
+      - name: Run publish pipeline
+        if: steps.guard.outputs.skip != 'true'
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_BASE_URL: ${{ secrets.DEEPSEEK_BASE_URL }}
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -46,31 +64,35 @@ jobs:
           WP_URL: ${{ secrets.WP_URL }}
           WP_USER: ${{ secrets.WP_USER }}
           WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
-        run: python src/main.py
+        # exit 1 on Feishu failure so the archive step below is skipped and
+        # the 08:20 fallback retries with the pool intact
+        run: python src/main.py publish
 
-      # Covers are referenced in the digest by relative name; CI pushes them to
-      # this repo so raw.githubusercontent URLs stay clickable from Feishu/WordPress.
-      - name: Publish covers to repo
-        if: success()
+      # One commit per day goes to the `archive` branch (digest + cover);
+      # main never receives bot commits.
+      - name: Archive daily edition
+        if: success() && steps.guard.outputs.skip != 'true'
         run: |
-          mkdir -p covers
-          cp output/cover_* covers/ 2>/dev/null || true
-          # prune covers older than 7 days (file names are cover_YYYYMMDD.*)
-          today=$(date +%s)
-          for f in covers/cover_*; do
-            [ -e "$f" ] || continue
-            d=$(basename "$f" | sed 's/^cover_\([0-9]\{8\}\).*/\1/')
-            if [ -n "$d" ] && [ $(( (today - $(date -d "$d" +%s)) / 86400 )) -ge 7 ]; then rm "$f"; fi
-          done
-          if [ -n "$(git status --porcelain covers/)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add covers/
-            git commit -m "publish covers $(date -u +%F)"
-            git push
-            echo "covers published"
+          TODAY=${{ steps.guard.outputs.today }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin refs/heads/archive >/dev/null 2>&1; then
+            git fetch origin archive --quiet
+            git checkout -B archive origin/archive
           else
-            echo "covers unchanged"
+            git checkout --orphan archive
+            git rm -rf --quiet . 2>/dev/null || true
+          fi
+          mkdir -p archive covers
+          cp "output/digest_$TODAY.md" "archive/$TODAY.md"
+          cp output/cover_* covers/ 2>/dev/null || true
+          git add archive covers
+          if [ -n "$(git status --porcelain archive covers)" ]; then
+            git commit -m "archive: $TODAY"
+            git push origin archive
+            echo "archived $TODAY"
+          else
+            echo "nothing new to archive"
           fi
 
       - name: Upload digest
@@ -80,4 +102,5 @@ jobs:
           name: daily-digest-output
           path: |
             output/
+            data/pool.json
             data/raw_articles.json

@@ -1,0 +1,47 @@
+name: Collect Batch
+
+# v3: collection-only runs. They append BATCH_SIZE articles to the pending
+# pool (data/pool.json) and never push anything. Timing tolerance is hours,
+# so plain GH cron is fine here — only the publish run needs precision
+# (see daily-digest.yml + cron-job.org).
+on:
+  schedule:
+    - cron: '0 6,12,18 * * *'   # UTC 06/12/18 = 北京 14:00 / 20:00 / 02:00
+  workflow_dispatch:
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # data/ (seen_urls.json + pool.json) is gitignored — the cache carries
+      # it across runs; key includes run_id so every run re-saves fresh state.
+      - name: Restore data cache
+        uses: actions/cache@v4
+        with:
+          path: data/
+          key: seen-urls-${{ github.run_id }}
+          restore-keys: |
+            seen-urls-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # No secrets needed: batch collection makes no LLM calls and no pushes.
+      - name: Collect batch into pool
+        run: python src/main.py collect
+
+      - name: Upload pool snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collect-batch
+          path: |
+            data/
+            output/

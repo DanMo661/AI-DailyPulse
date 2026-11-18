@@ -2,13 +2,9 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import re
-import shutil
-import subprocess
 import time
 from datetime import datetime
-from pathlib import Path
 
 import requests
 
@@ -203,55 +199,20 @@ def save_manual_posts(posts_map: dict):
 
 
 def save_daily_files(digest: str):
-    """Save the daily digest and social posts as permanent files."""
+    """Save the daily digest as the dated file that the CI archive step copies
+    onto the `archive` branch (covers are archived by the same step)."""
     today = datetime.now(BEIJING_TZ).strftime("%Y%m%d")
 
-    # Copy digest to dated file
     dated_digest = OUTPUT_DIR / f"digest_{today}.md"
     dated_digest.write_text(digest, encoding="utf-8")
     print(f"[publish] saved {dated_digest}")
 
-    # Save a short version for WeChat (first 2000 chars of digest body)
-    short = "\n".join(digest.split("\n")[:80])
-    wechat_file = OUTPUT_DIR / f"wechat_draft_{today}.md"
-    wechat_file.write_text(short, encoding="utf-8")
-    print(f"[publish] saved wechat draft: {wechat_file}")
-
 
 # ─── Orchestrator ───────────────────────────────────────
 
-# ─── Covers ─────────────────────────────────────────────
-
-COVERS_CDN_BASE = "https://cdn.jsdelivr.net/gh/DanMo661/AI-DailyPulse@main/covers/"
-
-
-def publish_covers_to_repo() -> list[str]:
-    """CI-only: copy freshly fetched covers into covers/, then commit and push
-    them with the checkout's persisted credentials. Replaces the workflow's
-    commit step (whose broken condition kept covers unpublished for weeks);
-    no-ops outside GitHub Actions. Returns pushed filenames."""
-    if os.environ.get("GITHUB_ACTIONS") != "true":
-        return []
-    covers = sorted(OUTPUT_DIR.glob("cover_*"))
-    if not covers:
-        return []
-    repo_root = Path(__file__).resolve().parents[1]
-    for f in covers:
-        shutil.copy2(f, repo_root / "covers" / f.name)
-
-    def git(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(["git", *args], cwd=repo_root, capture_output=True, text=True)
-
-    git("add", "covers")
-    commit = git("commit", "-m", f"publish covers {datetime.now(BEIJING_TZ):%Y-%m-%d}")
-    if commit.returncode == 0:
-        push = git("push")
-        if push.returncode != 0:
-            print(f"[publish] cover push failed: {push.stderr.strip()[:300]}")
-            return []
-    names = [f.name for f in covers]
-    print(f"[publish] covers pushed: {names}")
-    return names
+# Covers live on the `archive` branch (one commit per day, main stays clean);
+# jsDelivr serves them because raw.githubusercontent.com is unreliable in China.
+COVERS_CDN_BASE = "https://cdn.jsdelivr.net/gh/DanMo661/AI-DailyPulse@archive/covers/"
 
 
 def resolve_cover_urls(digest: str) -> str:
@@ -261,11 +222,12 @@ def resolve_cover_urls(digest: str) -> str:
     return re.sub(r"\]\((cover_[0-9]{8}\.[^)]+)\)", f"]({COVERS_CDN_BASE}\\1)", digest)
 
 
-def publish_all(digest: str, posts_map: dict):
-    """Run all publishing steps."""
+def publish_all(digest: str, posts_map: dict, dry_run: bool = False):
+    """Run all publishing steps. The caller treats a falsy 'feishu' result as
+    a failed run (Feishu is the one must-deliver channel). File exports
+    (wechat html, manual-review posts, dated digest) run even in dry-run so
+    local verification sees every artifact; only real pushes are skipped."""
     results = {}
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        publish_covers_to_repo()
     # CDN 图链对本地预览同样有用（正则幂等，重复替换无副作用）
     digest = resolve_cover_urls(digest)
     today = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
@@ -274,15 +236,18 @@ def publish_all(digest: str, posts_map: dict):
     results["wechat"] = save_wechat_html(digest)
 
     # 1. Feishu - instant push (digest only; social posts live in output files)
-    results["feishu"] = publish_feishu(digest)
+    results["feishu"] = "skipped (dry-run)" if dry_run else publish_feishu(digest)
 
     # 2. Telegram - instant push
-    results["telegram"] = publish_telegram_digest(digest)
+    results["telegram"] = "skipped (dry-run)" if dry_run else publish_telegram_digest(digest)
 
     # 3. WordPress - draft (safe, won't auto-publish)
-    title = f"AI DailyPulse | {today}"
-    wp_preview = digest[:10000].rstrip() + "\n\n[完整版见公众号]"
-    results["wordpress"] = publish_wordpress(title, wp_preview, status="draft")
+    if dry_run:
+        results["wordpress"] = "skipped (dry-run)"
+    else:
+        title = f"AI DailyPulse | {today}"
+        wp_preview = digest[:10000].rstrip() + "\n\n[完整版见公众号]"
+        results["wordpress"] = publish_wordpress(title, wp_preview, status="draft")
 
     # 4. Save for manual review (WeChat, XHS, Zhihu)
     save_manual_posts(posts_map)

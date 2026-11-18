@@ -16,10 +16,12 @@ account exists and the manual loop has proven the content works (4 weeks).
 import re
 from datetime import datetime
 
-from config import BEIJING_TZ, OUTPUT_DIR
+from config import BEIJING_TZ, LINK_PREFIX, OUTPUT_DIR
 
 _FONT = ("font-family:-apple-system,BlinkMacSystemFont,'PingFang SC',"
          "'Microsoft YaHei',sans-serif;")
+
+_LINK_STYLE = "color:#1a73e8;text-decoration:none;"
 
 
 def _inline(md: str) -> str:
@@ -28,29 +30,55 @@ def _inline(md: str) -> str:
     s = re.sub(r"\*\*(.+?)\*\*",
                r'<strong style="color:#1a1a1a;">\1</strong>', s)
     s = re.sub(r"\[(.+?)\]\((.+?)\)",
-               r'<a href="\2" style="color:#1a73e8;text-decoration:none;">\1</a>', s)
+               rf'<a href="\2" style="{_LINK_STYLE}">\1</a>', s)
     s = re.sub(r"`(.+?)`",
                r'<code style="background:#f1f3f5;padding:1px 4px;'
                r'border-radius:3px;font-size:13px;">\1</code>', s)
     return s
 
 
+def _link_paragraph(url: str) -> str:
+    """The standalone 原文链接 line of the v3 digest, as a clickable link."""
+    return (
+        f'<p style="margin:8px 0 2px;font-size:13px;">'
+        f'<a href="{url}" style="{_LINK_STYLE}">原文链接</a></p>'
+    )
+
+
 def digest_to_wechat_html(digest: str) -> tuple[str, str]:
-    """Convert a v2 digest (headline + picks) into (title, wechat_html).
+    """Convert a v3 digest (headline + two-paragraph picks) into
+    (title, wechat_html).
 
     Handles exactly the shape produced by process.assemble_digest:
-    H1 date title, 🔥 headline section (H3 + paragraph + cover + link),
-    📌 numbered picks, footer quote.
+    H1 date title, 🔥 headline section (H3 + paragraph + cover +
+    原文链接 line), 📌 picks where each item is a `N. **title**` line,
+    its own blurb paragraph and its own 原文链接 line.
     """
     title = f"AI DailyPulse | {datetime.now(BEIJING_TZ).strftime('%Y年%m月%d日')}"
     parts = [
         f'<section style="{_FONT}font-size:15px;color:#333;'
         f'line-height:1.8;letter-spacing:0.3px;padding:0 4px;">'
     ]
-    section = ""          # current section header for context
-    pick_buf = []         # accumulate pick items to wrap in one card list
+    pick_buf = []         # finished pick cards, wrapped in one grey list box
+    pending = None        # {'num', 'title', 'blurb'} — pick awaiting its link line
+
+    def flush_pending():
+        nonlocal pending
+        if pending:
+            # link line never arrived — still render what we have
+            card = (
+                f'<div style="padding:10px 0;border-bottom:1px solid #ececec;">'
+                f'<p style="margin:0 0 4px;font-weight:600;color:#1a1a1a;'
+                f'line-height:1.6;">{pending["num"]}. {_inline(pending["title"])}</p>'
+                f'<p style="margin:0;font-size:13.5px;color:#666;'
+                f'line-height:1.7;">{_inline(pending.get("blurb", ""))}</p></div>'
+            )
+            pick_buf.append(card)
+            pending = None
 
     def flush_picks():
+        nonlocal pending
+        flush_pending()
         if pick_buf:
             parts.append(
                 '<div style="background:#f7f8fa;border-radius:10px;'
@@ -87,36 +115,41 @@ def digest_to_wechat_html(digest: str) -> tuple[str, str]:
                     f'<img src="{m.group(1)}" alt="" '
                     f'style="width:100%;border-radius:8px;margin:10px 0;" />'
                 )
-        elif re.match(r"^\d+\.\s", line):              # numbered pick item
-            m = re.match(r"^(\d+)\.\s\*\*(.+?)\*\*（\[(.+?)\]\((.+?)\)）—\s*(.*)$", line)
-            if m:
-                num, t, link_text, url, blurb = m.groups()
+        elif line.startswith(LINK_PREFIX):             # standalone link line
+            url = line[len(LINK_PREFIX):].strip()
+            if pending:                                # finishes a pick card
+                num, t, blurb = pending["num"], pending["title"], pending.get("blurb", "")
                 pick_buf.append(
                     f'<div style="padding:10px 0;'
                     f'border-bottom:1px solid #ececec;">'
                     f'<p style="margin:0 0 4px;font-weight:600;color:#1a1a1a;'
                     f'line-height:1.6;">{num}. '
-                    f'<a href="{url}" style="color:#1a73e8;'
-                    f'text-decoration:none;">{t}</a></p>'
+                    f'<a href="{url}" style="{_LINK_STYLE}">{_inline(t)}</a></p>'
                     f'<p style="margin:0;font-size:13.5px;color:#666;'
-                    f'line-height:1.7;">{_inline(blurb)}</p></div>'
+                    f'line-height:1.7;">{_inline(blurb)}</p>'
+                    f'<p style="margin:6px 0 0;font-size:13px;">'
+                    f'<a href="{url}" style="{_LINK_STYLE}">原文链接</a></p></div>'
                 )
+                pending = None
+            else:                                      # headline's link
+                parts.append(_link_paragraph(url))
+        elif re.match(r"^\d+\.\s", line):              # pick title line
+            # NB: not flush_picks() — all picks of a section share one grey box;
+            # only a stale pick (missing link line) gets flushed out here
+            flush_pending()
+            m = re.match(r"^(\d+)\.\s\*\*(.+?)\*\*$", line)
+            if m:
+                pending = {"num": m.group(1), "title": m.group(2), "blurb": ""}
             else:
-                pick_buf.append(
-                    f'<p style="margin:8px 0;">{_inline(line)}</p>'
-                )
-        elif line.startswith("> "):                    # footer quote
-            flush_picks()
-            parts.append(
-                f'<blockquote style="margin:20px 0 6px;padding:10px 14px;'
-                f'background:#f7f8fa;border-radius:8px;color:#888;'
-                f'font-size:13px;">{_inline(line[2:].strip())}</blockquote>'
-            )
+                parts.append(f'<p style="margin:8px 0;">{_inline(line)}</p>')
         else:                                          # plain paragraph
-            flush_picks()
-            parts.append(
-                f'<p style="margin:10px 0;line-height:1.8;">{_inline(line)}</p>'
-            )
+            if pending and not pending["blurb"]:       # the pick's blurb paragraph
+                pending["blurb"] = line
+            else:
+                flush_pending()
+                parts.append(
+                    f'<p style="margin:10px 0;line-height:1.8;">{_inline(line)}</p>'
+                )
     flush_picks()
     parts.append("</section>")
     return title, "".join(parts)

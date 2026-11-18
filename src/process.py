@@ -1,57 +1,27 @@
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
-from openai import OpenAI
+from llm import chat, parse_json
 
 from config import (
-    LLM_API_KEY,
-    LLM_BASE_URL,
-    LLM_MODEL,
     BEIJING_TZ,
-    RAW_ARTICLES_FILE,
     DIGEST_OUTPUT,
+    LINK_PREFIX,
+    POOL_FILE,
     SOCIAL_OUTPUT,
 )
 
-_client = None
+# abort publishing when this fraction of LLM calls fails — a full API outage
+# shouldn't push a digest full of fallback placeholders to channels
+MAX_ERROR_RATIO = 0.5
+
+# v3 deadline: the publish run digests the whole pool (~40 articles) between
+# 07:50 and 08:00 Beijing, so per-article calls go through a thread pool
+FILTER_WORKERS = 4
 
 
-def _get_client() -> OpenAI:
-    """Lazy client: created on first LLM call, so --collect-only works without a key."""
-    global _client
-    if _client is None:
-        _client = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
-    return _client
-
-
-def _chat(system: str, user: str, temperature: float = 0.3, max_tokens: int = 2000, json_mode: bool = False) -> str:
-    kwargs = {}
-    if json_mode:
-        kwargs["response_format"] = {"type": "json_object"}
-    resp = _get_client().chat.completions.create(
-        model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        temperature=temperature,
-        max_tokens=max_tokens,
-        **kwargs,
-    )
-    return resp.choices[0].message.content
-
-
-def _parse_json(text: str) -> dict:
-    """Parse a JSON object out of an LLM reply (with fence fallback)."""
-    text = text.strip()
-    if "```" in text:
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    return json.loads(text)
-
-
-# ─── Step 1: Filter + Summarize (one LLM call per article) ──
+# ─── Step 1: Filter + Summarize (one LLM call per article, parallel) ──
 
 DIGEST_PROMPT = """你是技术内容编辑兼分析师。先判断这篇文章是否值得收录到每日AI/科技文摘，值得则完成中文摘要。
 
@@ -88,42 +58,54 @@ def _fallback_digest(article: dict) -> dict:
     }
 
 
-def process_articles(articles: list[dict]) -> tuple[list[dict], int]:
-    """Filter + summarize each article in a single LLM call, drop irrelevant ones.
+def _digest_one(article: dict) -> tuple[dict, str]:
+    """LLM-filter one article. Returns (article, status): kept / dropped / error."""
+    text = f"标题: {article['title']}\n来源: {article['source']}\n摘要: {article.get('summary', '')[:1500]}"
+    try:
+        data = parse_json(chat(DIGEST_PROMPT, text, temperature=0.1, max_tokens=600, json_mode=True))
+        if not data.get("relevant"):
+            return article, "dropped"
+        article["filter_reason"] = data.get("reason", "")
+        points = [str(p) for p in (data.get("key_points") or []) if str(p).strip()]
+        article["digest"] = {
+            "title_cn": str(data.get("title_cn") or article["title"])[:50],
+            "key_points": points[:2],
+            "one_liner": str(data.get("one_liner") or "")[:60],
+            "relevance_score": float(data.get("relevance_score") or 0.5),
+        }
+        return article, "kept"
+    except Exception as e:
+        print(f"[process] digest error for '{article['title'][:40]}': {e}")
+        # LLM failure shouldn't drop the article
+        article["digest"] = _fallback_digest(article)
+        return article, "error"
 
-    Returns (kept_articles, error_count). A failed call keeps the article with a
-    fallback digest; the caller decides whether the error ratio is acceptable.
+
+def process_articles(articles: list[dict]) -> tuple[list[dict], int]:
+    """Filter + summarize the pool in parallel, drop irrelevant ones.
+
+    Returns (kept_articles, error_count) in original pool order. A failed call
+    keeps the article with a fallback digest; the caller decides whether the
+    error ratio is acceptable.
     """
-    kept = []
+    kept_by_index = {}
     errors = 0
-    for i, a in enumerate(articles):
-        print(f"[process] digesting {i+1}/{len(articles)}: {a['title'][:50]}")
-        text = f"标题: {a['title']}\n来源: {a['source']}\n摘要: {a.get('summary', '')[:1500]}"
-        try:
-            data = _parse_json(_chat(DIGEST_PROMPT, text, temperature=0.1, max_tokens=600, json_mode=True))
-            if not data.get("relevant"):
+    with ThreadPoolExecutor(max_workers=FILTER_WORKERS) as ex:
+        futures = {ex.submit(_digest_one, a): i for i, a in enumerate(articles)}
+        for fut in as_completed(futures):
+            i = futures[fut]
+            article, status = fut.result()
+            if status == "dropped":
                 continue
-            a["filter_reason"] = data.get("reason", "")
-            points = [str(p) for p in (data.get("key_points") or []) if str(p).strip()]
-            a["digest"] = {
-                "title_cn": str(data.get("title_cn") or a["title"])[:50],
-                "key_points": points[:2],
-                "one_liner": str(data.get("one_liner") or "")[:60],
-                "relevance_score": float(data.get("relevance_score") or 0.5),
-            }
-        except Exception as e:
-            print(f"[process] digest error for '{a['title'][:40]}': {e}")
-            # LLM failure shouldn't drop the article
-            errors += 1
-            a["digest"] = _fallback_digest(a)
-        kept.append(a)
+            if status == "error":
+                errors += 1
+            kept_by_index[i] = article
+            tag = {"kept": "ok", "error": "ERROR"}.get(status, status)
+            print(f"[process] {len(kept_by_index)}/{len(articles)} {tag}: {article['title'][:50]}")
+
+    kept = [kept_by_index[i] for i in sorted(kept_by_index)]
     print(f"[process] filtered: {len(articles)} → {len(kept)} ({errors} errors)")
     return kept, errors
-
-
-# abort publishing when this fraction of LLM calls fails — a full API outage
-# shouldn't push a digest full of fallback placeholders to channels
-MAX_ERROR_RATIO = 0.5
 
 
 # ─── Step 2: Finalize (one editor call → headline + 4 picks) ──
@@ -134,10 +116,10 @@ FINALIZE_PROMPT = """你是科技新闻主编，为每日 AI/科技早报定稿�
 
 1. 选出本日最重磅、最值得头条的 1 篇：
    - headline_title: 抓人眼球的中文标题（≤25字，侧重重点，如"DeepSeek V4 正式版发布！"）
-   - headline_paragraph: 120~180字正文，一句话点出新闻，再展开核心信息，自然段落，不列点
+   - headline_paragraph: 180~220字正文，一句话点出新闻，再展开核心信息与影响，自然段落，不列点
 2. 另选 4 篇本日最值得关注的，按重要性从高到低排序，每篇：
    - title_cn: 中文标题（英文原文转中文，忠于原意）
-   - blurb: 50字左右简介
+   - blurb: 50~100字简介，硬上限110字，信息量要足，写清"发生了什么+为什么重要"
    - url: 原文链接（必须引用下方候选中的 url，禁止编造）
 
 链接规则: 头条与精选的链接优先选新闻站点/公司官网/官方博客；
@@ -183,9 +165,9 @@ def finalize(articles: list[dict]) -> dict:
         }
 
     try:
-        data = _parse_json(_chat(
+        data = parse_json(chat(
             FINALIZE_PROMPT, _candidate_section(articles),
-            temperature=0.2, max_tokens=1200, json_mode=True,
+            temperature=0.2, max_tokens=1600, json_mode=True,
         ))
     except Exception as e:
         print(f"[process] finalize error, using fallback picks: {e}")
@@ -211,7 +193,7 @@ def finalize(articles: list[dict]) -> dict:
         items.append({
             "url": url,
             "title_cn": str(it.get("title_cn") or by_url[url]["digest"].get("title_cn", ""))[:50],
-            "blurb": str(it.get("blurb") or by_url[url]["digest"].get("one_liner", ""))[:80],
+            "blurb": str(it.get("blurb") or by_url[url]["digest"].get("one_liner", ""))[:115],
         })
         if len(items) == 4:
             break
@@ -225,7 +207,7 @@ def finalize(articles: list[dict]) -> dict:
         items.append({
             "url": a["url"],
             "title_cn": a["digest"].get("title_cn", a["title"])[:50],
-            "blurb": a["digest"].get("one_liner", "")[:80],
+            "blurb": a["digest"].get("one_liner", "")[:115],
         })
 
     return {"headline": headline, "items": items}
@@ -279,7 +261,7 @@ def generate_headline_posts(headline: dict, article: dict) -> dict:
     posts = {}
     for platform, prompt in STYLE_PROMPTS.items():
         try:
-            posts[platform] = _chat(prompt, content, temperature=0.7, max_tokens=1500)
+            posts[platform] = chat(prompt, content, temperature=0.7, max_tokens=1500)
         except Exception as e:
             print(f"[process] {platform} rewrite error: {e}")
             posts[platform] = ""
@@ -288,28 +270,34 @@ def generate_headline_posts(headline: dict, article: dict) -> dict:
 
 # ─── Step 4: Assemble Daily Digest ──────────────────────
 
+
 def assemble_digest(headline: dict, items: list[dict], cover_file: str = "") -> str:
-    """Assemble the blog-style digest: 1 headline story + a numbered pick list."""
+    """Assemble the digest: headline (body ~200 chars) + numbered picks.
+
+    Copy-paste friendly v3 format: plain URLs on their own paragraph, no
+    AI-generated footer, text and link never crammed into one line.
+    """
     today = datetime.now(BEIJING_TZ).strftime("%Y年%m月%d日")
 
-    cover_section = f"\n![封面]({cover_file})\n" if cover_file else ""
+    cover_section = f"\n![封面]({cover_file})\n\n" if cover_file else ""
 
-    list_entries = []
+    pick_entries = []
     for i, it in enumerate(items, 1):
-        list_entries.append(
-            f"{i}. **{it['title_cn']}**（[原文]({it['url']})）— {it['blurb'].rstrip('。')}。"
+        pick_entries.append(
+            f"{i}. **{it['title_cn']}**\n\n"
+            f"{it['blurb'].rstrip('。')}。\n\n"
+            f"{LINK_PREFIX}{it['url']}\n"
         )
 
     digest = (
         f"# 🤖 AI DailyPulse | {today}\n\n"
         f"## 🔥 今日头条\n\n"
         f"### {headline['headline_title']}\n\n"
-        f"{headline['headline_paragraph'].rstrip('。')}。\n"
-        f"{cover_section}\n"
-        f"[原文链接]({headline['url']})\n\n"
+        f"{headline['headline_paragraph'].rstrip('。')}。\n\n"
+        f"{cover_section}"
+        f"{LINK_PREFIX}{headline['url']}\n\n"
         f"## 📌 其他重点\n\n"
-        + "\n".join(list_entries)
-        + "\n\n> 📬 AI 自动生成\n"
+        + "\n".join(pick_entries)
     )
 
     return digest
@@ -317,21 +305,22 @@ def assemble_digest(headline: dict, items: list[dict], cover_file: str = "") -> 
 
 # ─── Orchestrator ───────────────────────────────────────
 
-def process_all():
-    """Run the full AI processing pipeline."""
-    if not RAW_ARTICLES_FILE.exists():
-        print("[process] no raw articles")
-        return None
+def process_pool(articles: list[dict]):
+    """Run the full AI processing pipeline over the pending pool.
 
-    articles = json.loads(RAW_ARTICLES_FILE.read_text(encoding="utf-8"))
+    Returns {"digest", "posts", "article_count"} on success,
+    {"abort": reason} when the LLM failure rate is too high,
+    or None when there is nothing to publish.
+    """
     if not articles:
-        print("[process] empty articles list")
+        print("[process] empty pool")
         return None
 
-    # Step 1: filter + summarize
+    # Step 1: filter + summarize (parallel)
     articles, errors = process_articles(articles)
-    if errors and errors / len(articles) >= MAX_ERROR_RATIO:
-        return {"abort": f"{errors}/{len(articles)} LLM calls failed (invalid API key or quota?)"}
+    total = len(articles) + errors
+    if total and errors / total >= MAX_ERROR_RATIO:
+        return {"abort": f"{errors}/{total} LLM calls failed (invalid API key or quota?)"}
     if not articles:
         print("[process] all articles filtered out")
         return None
@@ -356,7 +345,7 @@ def process_all():
     except Exception as e:
         print(f"[process] cover skipped: {e}")
 
-    # Step 5: assemble blog-style digest
+    # Step 5: assemble digest
     digest = assemble_digest(headline, items, cover_file)
     DIGEST_OUTPUT.write_text(digest, encoding="utf-8")
     print(f"[process] digest written to {DIGEST_OUTPUT}")
@@ -369,6 +358,9 @@ def process_all():
 
 
 if __name__ == "__main__":
-    result = process_all()
+    articles = []
+    if POOL_FILE.exists():
+        articles = json.loads(POOL_FILE.read_text(encoding="utf-8"))
+    result = process_pool(articles)
     if result:
-        print(f"\n[process] done: {result['article_count']} articles processed")
+        print(f"\n[process] done: {result.get('article_count', 0)} articles processed")

@@ -50,15 +50,36 @@ SOURCES = {
 
 # Reddit removed: it returns 403 HTML to CI runner IPs, so those sources
 # yielded 0 articles on every scheduled run.
+# 机器之心 removed: /rss returns an HTML page since ~2026-10 (verified dead).
+# VentureBeat removed: AI feed returned 0 entries (verified dead 2026-11-18).
+# Order matters: batch selection round-robins across sources in this order.
 RSS_FEEDS = [
-    "https://hnrss.org/frontpage?count=10",
+    "https://www.qbitai.com/feed",                # 量子位，中文 AI 媒体
     "https://techcrunch.com/feed/",
     "https://simonwillison.net/atom/everything/",  # highest-signal AI blog
+    "https://www.theverge.com/rss/index.xml",
+    "https://feeds.arstechnica.com/arstechnica/index",
+    "https://www.technologyreview.com/feed/",
     "https://lobste.rs/rss",  # replaces r/programming
+    "https://hnrss.org/frontpage?count=10",  # HN second channel (dedup vs hn_top)
 ]
+
+# AIHOT (aihot.news, 卡兹克) — public agent API, anonymous, ~60 req/min limit.
+# Pre-filtered Chinese AI news: zh title + AI digest + original-article link
+# + 0-100 score. No image fields (covers still come from og:image).
+AIHOT_API_URL = "https://aihot.news/api/v1/items"
+AIHOT_WINDOW = "24h"
+AIHOT_LIMIT = 50
 
 MAX_ARTICLES_PER_SOURCE = 10
 MAX_TOTAL_ARTICLES = 30
+
+# --- v3 batch collection ---
+# v3 cadence: 4 collection batches a day (14:00/20:02/02:00/07:50 Beijing),
+# each appends BATCH_SIZE articles to the pending pool; the last batch runs
+# inside the publish job which then digests the whole pool.
+BATCH_SIZE = 10
+MAX_POOL_SIZE = 60
 
 # --- Publishing ---
 TELEGRAM_BOT_TOKEN = env_str("TELEGRAM_BOT_TOKEN")
@@ -75,8 +96,14 @@ FEISHU_SECRET = env_str("FEISHU_SECRET")
 # --- Runtime ---
 SEEN_URLS_FILE = DATA_DIR / "seen_urls.json"
 RAW_ARTICLES_FILE = DATA_DIR / "raw_articles.json"
+POOL_FILE = DATA_DIR / "pool.json"
 DIGEST_OUTPUT = OUTPUT_DIR / "digest.md"
 SOCIAL_OUTPUT = OUTPUT_DIR / "social_posts.json"
+
+# v3 digest format: every article (headline + picks) ends with its link on
+# its own paragraph, prefixed like this — plain URL so the digest is
+# copy-paste friendly (used by process.assemble_digest and wechat.py).
+LINK_PREFIX = "原文链接："
 
 
 def validate_config() -> None:

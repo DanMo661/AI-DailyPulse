@@ -18,18 +18,17 @@
 
 ## What it does every day
 
-One edition daily at **23:00 UTC (07:00 Beijing time)**, entirely inside GitHub Actions:
+Four collection batches a day build a shared news pool (no pushes); the last batch digests the pool and ships the edition (Beijing time):
 
-| Step | What happens |
-|---|---|
-| 📡 Collect | Fetches ~30 articles in parallel from HN, ArXiv (cs.AI), dev.to, hnrss, TechCrunch, Simon Willison, lobste.rs; dedupes by URL |
-| 🔍 Filter | LLM judges each article: rejects marketing noise, writes a Chinese headline + key points for the rest |
-| 📝 Curate | One "editor-in-chief" call picks **1 headline story** (120–180 character paragraph) + **4 notable picks** |
-| 🖼️ Cover | Grabs the headline article's `og:image` as the cover, archived to `covers/` |
-| 📣 Rewrite | Headline is rewritten into 5 platform-specific posts (WeChat / Xiaohongshu / Zhihu / Telegram / Douyin) |
-| 🚀 Publish | Feishu (one message) · Telegram (per-section) · WordPress (draft) · rest saved as files for manual posting |
+| Time | What happens | Trigger |
+|---|---|---|
+| 14:00 | 📡 Batch 1: round-robin across ~12 sources (AIHOT, 量子位, HN, ArXiv, TechCrunch, The Verge…), 10 articles into the pool | GitHub Actions cron |
+| 20:00 | 📡 Batch 2 | GitHub Actions cron |
+| 02:00 | 📡 Batch 3 | GitHub Actions cron |
+| **07:50** | 📡 Batch 4 → 🔍 LLM-filters the ~40-article pool in parallel → 📝 one editor call (**1 headline ~200 chars + 4 picks, 50–100 chars each**) → 🖼️ og:image cover → 🚀 **Feishu push** → 🗄️ archive | External free cron (cron-job.org, ~1 min accuracy) |
+| 08:20 | Fallback retry: skips silently if today's edition is already archived — never double-pushes | GitHub Actions cron |
 
-Guardrails: if ≥ 50% of the per-article filter calls fail, the edition aborts (better no issue than a broken one); a missing cover never blocks the pipeline.
+Guardrails: if ≥ 50% of the per-article filter calls fail, the edition aborts (better no issue than a broken one); a missing cover never blocks the pipeline; a failed Feishu delivery keeps the pool for the 08:20 fallback.
 
 ## Example output (real, not staged)
 
@@ -63,7 +62,9 @@ Guardrails: if ≥ 50% of the per-article filter calls fail, the edition aborts 
    | `WP_URL` + `WP_USER` + `WP_APP_PASSWORD` | channel | WordPress (saves as **draft**, never auto-publishes) |
 
 3. Open the **Actions** tab, enable the workflow (GitHub disables schedules on forks by default), then trigger **Run workflow** once to verify
-4. Done — issues go out automatically every day at 23:00 UTC
+4. **For punctual delivery**: GitHub's built-in cron drifts by hours, so create a free daily job on [cron-job.org](https://cron-job.org) at 07:50 Asia/Shanghai that POSTs to
+   `https://api.github.com/repos/<you>/AI-DailyPulse/actions/workflows/daily-digest.yml/dispatches` with header `Authorization: Bearer <fine-grained PAT, Actions: RW>` and body `{"ref":"main"}`
+5. Done — the Feishu push lands at **8:00 Beijing time** every morning
 
 **Cost**: ~35 LLM calls per edition (30 per-article passes + 1 editor pass + 5 platform rewrites). On DeepSeek's official API that's single-digit cents; free-tier models bring it to zero.
 
@@ -74,7 +75,8 @@ python -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env    # put your LLM_API_KEY in
 python src/main.py                    # full pipeline
-python src/main.py --collect-only     # collect only, no LLM usage
+python src/main.py collect            # one collection batch into the pool (no LLM, no push)
+python src/main.py publish --dry-run  # digest the pool, write artifacts, skip real pushes
 ```
 
 ## Publishing channels

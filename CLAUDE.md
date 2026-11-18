@@ -1,42 +1,68 @@
 # AI DailyPulse
 
-全自动 AI/科技早报管线：采集 → LLM 精选 → blog 式早报 + 封面图 → 多渠道发布。GitHub Actions 每天北京时间 07:00 定时运行（cron 用 UTC 23:00）。
+全自动 AI/科技早报管线：一天 4 批采集攒池 → 早上 LLM 精选定稿 → 飞书推送 + 归档。每天北京时间 **08:00 准时**出刊（cron-job.org 外部触发，GH cron 只做兜底）。
 
-## 流程（v2：精选重点 + 头条 Blog）
+## 每日时间线（北京时间）
 
-1. **采集** `src/collect.py` — 并行抓 HN / dev.to / ArXiv / RSS（hnrss、TechCrunch、Simon Willison、lobste.rs）约 30 篇，URL md5 去重，`data/seen_urls.json` 记录已见（CI 里靠 actions/cache 持久化，key 用 run_id 保证每次回写）
-2. **单篇筛选+摘要** `src/process.py` — DeepSeek 每篇 1 次调用（JSON mode）：拒掉无关，留下相关篇目
-3. **定稿** — 1 次"主编"调用：从候选挑 1 篇头条（抓重点的标题 + 120~180 字正文）+ 4 篇精选（中文标题 + 50 字简介 + 链接），其余丢弃
-4. **封面图** `src/cover.py` — 抓头条原文网页的 `og:image`（官网官方分享图）存 `output/cover_YYYYMMDD.*`；抓不到不阻塞
-5. **头条文案** — 头条 1 篇 × 5 平台（公众号/小红书/知乎/Telegram/抖音）
-6. **组装** `output/digest.md` — blog 格式：`🔥 今日头条`（标题+正文+链接+封面引用）+ `📌 其他重点`（1.2.3.4 编号列表）
-7. **发布** `src/publish.py` — 飞书机器人只推早报 1 条（整发）；WordPress 草稿；小红书/抖音文案不推飞书，只存 `output/`（manual_review/），随 CI artifact 上传
+| 时间 | 动作 | workflow | 触发 |
+|---|---|---|---|
+| 14:00 / 20:00 / 02:00 | 采集批次 1-3：每源轮询选 10 篇入 `data/pool.json`，不推送、不耗 LLM | `collect.yml` | GH cron（延迟无妨） |
+| 07:50 | 批次 4 采集 → 池内 ~40 篇 LLM 并行筛选（4 线程）→ 主编定稿 → 封面 → **推飞书** → 归档 | `daily-digest.yml` | **cron-job.org dispatch**（误差 ~1 分钟） |
+| 08:20 | 兜底重试：归档分支已有今日刊则 exit 0，绝不双推 | `daily-digest.yml` | GH cron `20 0 * * *` |
 
-## 约定
+## 信息源（v3）
 
-- 配置全走环境变量（`.env` 本地 / repo secrets CI），空值自动回退默认——workflow 透传全部渠道 secret，未配置的为空、publish 时自动跳过
-- LLM 调用必须容错：单篇失败降级保留；**累计失败率 ≥50% 中止发布**（护栏）；封面图失败跳过
-- 0 新文章是正常日（exit 0），不是失败
-- 飞书签名算法特殊：HMAC key = `{timestamp}\n{secret}`，消息体为空，改 `_feishu_sign` 前先查官方文档
-- 日期统一用北京时间（`config.BEIJING_TZ`）
+- **AIHOT**（aihot.news）主力源：官方公开 API `GET /api/v1/items?mode=selected&window=24h&limit=50`，匿名免 key，限流 60 req/min（每批只调 1 次）。条目字段：`title`（中文标题）/`summary`（中文 AI 导读）/`links.original`（原文链接）/`score`（0-100）/`publishedAt`/`category`。**无图片字段**，封面仍走原文 og:image。其摘要只当原料，仍过本管线 LLM 筛选改写。
+- **中文**：量子位 `qbitai.com/feed`（已验证）。机器之心 RSS 已死（2026-11 实测返回 HTML）。
+- **英文**：TechCrunch、Simon Willison、The Verge、Ars Technica、MIT Tech Review、lobste.rs、HN×2（Firebase API + hnrss，URL 去重）、dev.to、ArXiv cs.AI。
+- 已弃用：Reddit（CI IP 被 403）、VentureBeat（feed 0 条）、X（官方 API $100/月起，免费通道全不稳）。
+- 批次选取按**源轮询**（`collect._round_robin`）：每轮每源取 1 篇直到 `BATCH_SIZE=10`，防 HN 高分挤掉 score=0 的 RSS 新源。
+- `feedparser` 走 urllib 无超时，`collect.py` 用 `socket.setdefaulttimeout(25)` 兜底（lobste.rs 本机不可达会无限挂起）。
 
-## 密钥
+## 格式规范（v3，直接复制粘贴版）
 
-- LLM key：任意 OpenAI 兼容供应商，配置走 `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`（旧名 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` 仍生效，workflow 两者都透传）。默认 DeepSeek 官方；接入 OrcaRouter 例：`LLM_BASE_URL=https://api.orcarouter.ai/v1`，模型名带供应商前缀如 `deepseek/deepseek-chat`（`-free` 后缀是免费档，429 限流紧）。本地在项目根 `.env`（gitignored），CI 在 repo secrets。密钥值不放本文件。
-- 飞书 `FEISHU_WEBHOOK_URL` / `FEISHU_SECRET`：仅在 GitHub repo secret。
-- Telegram `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHANNEL`、WordPress `WP_URL` / `WP_USER` / `WP_APP_PASSWORD`：可选渠道，仅在 repo secret（2026-09-15 修复：此前 workflow 未透传，配置了也不会生效）。
-- `XHS_COOKIE`（小红书）：仅本地 `.env`，微调发布脚本用。
+- 头条：标题 ≤25 字 + 正文 **180~220 字**自然段；其他重点 4 条：**标题行 / 简介 50~100 字（硬上限 110）/ `原文链接：<URL>` 独立一行**。
+- 链接一律裸 URL（不写 markdown 链接），复制到任何平台可点；封面用 `![封面](cover_*.jpg)` 引用。
+- **无 "AI 自动生成" 标注**（用户要求产出可直接复制发布）。
+- 改格式必须同步三处：`process.assemble_digest`（生成）、`wechat.digest_to_wechat_html`（公众号 HTML 解析）、`scripts/check_format.py`（断言）。
+
+## 状态与护栏
+
+- `data/seen_urls.json`：已见 URL md5（保留 5000 条），跨运行去重；CI 靠 actions/cache 持久化（key 带 run_id 每次回写，restore-keys 前缀匹配）。
+- `data/pool.json`：待发布池，上限 60 按 `fetched_at` 淘汰（`state.py`）。**飞书确认送达后才清池**；失败/中止保留给 08:20 兜底重试（批次 4 重复采集的内容被 seen 去重，池最多多攒一批）。
+- 单篇 LLM 失败率 ≥50% → 当期中止（exit 1），池保留。0 新文章/池空是正常日（exit 0），不是失败。
+- 飞书是**唯一必达渠道**：`main.py` 里飞书失败 → exit 1 → workflow 跳过归档 → 兜底重试。Telegram/WordPress 空值自动跳过。
+- LLM 调用统一走 `llm.chat()`：2 次重试退避；改超时/重试只动这一处。
+
+## 归档
+
+`archive` 分支，每天 1 个 bot commit：`archive/YYYYMMDD.md` + `covers/cover_*.jpg`，不再 7 天清理（每天 ~50KB）。**main 分支零 bot commit**。飞书/公众号里的图链走 jsDelivr `@archive` 分支（`publish.COVERS_CDN_BASE`；raw.githubusercontent 国内不可靠）。归档步骤 `if: success()`，只在飞书真送达后执行。
 
 ## 本地运行与验证
 
 ```bash
 python -m venv .venv && .venv/Scripts/pip install -r requirements.txt  # Git Bash
-cp .env.example .env   # 填 DEEPSEEK_API_KEY（必填）
-.venv/Scripts/python src/main.py --collect-only   # 验采集
-.venv/Scripts/python src/main.py                  # 全流程
+cp .env.example .env   # 填 LLM_API_KEY
+.venv/Scripts/python src/main.py collect            # 采集一批入池（无需 key、不推送）
+.venv/Scripts/python src/main.py publish --dry-run  # 消化池子产出全部产物，不真实推送、不清池
+.venv/Scripts/python scripts/check_format.py        # 断言格式（头条字数/简介字数/链接独立成行/无 AI 标注）
+.venv/Scripts/python src/main.py full               # 旧版一次性全流程（本地测试用）
 ```
 
-产物在 `output/`：`digest.md`、`cover_*.jpg`、`social_posts.json`、`manual_review/`。
+产物在 `output/`：`digest.md`、`digest_YYYYMMDD.md`、`cover_*.jpg`、`social_posts.json`、`manual_review/`、`wechat/YYYYMMDD_公众号.html`。GitHub 直连本机不稳，git 远程操作用 `-c http.proxy=http://127.0.0.1:7897`。
+
+## 密钥
+
+- LLM key：`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`（旧名 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` 仍生效，workflow 两者都透传）。本地 `.env`；CI repo secrets。
+- 飞书 `FEISHU_WEBHOOK_URL` / `FEISHU_SECRET`：唯一必达渠道，仅 repo secret。
+- Telegram、WordPress：可选渠道，空值自动跳过。`XHS_COOKIE`（小红书）仅本地 `.env`。
+- cron-job.org 的 GitHub PAT：细粒度、仅本仓库、Actions RW——**只在 cron-job.org 后台**，不进仓库。
+
+## 定时触发（cron-job.org，用户手动配置）
+
+1. GitHub → Settings → Developer settings → Fine-grained personal access tokens：仅本仓库，权限 `Actions: Read and write`。
+2. cron-job.org 建任务：每天 **07:50 Asia/Shanghai**，Method POST，URL `https://api.github.com/repos/DanMo661/AI-DailyPulse/actions/workflows/daily-digest.yml/dispatches`，Headers：`Authorization: Bearer <PAT>`、`Accept: application/vnd.github+json`、`User-Agent: cron`（GitHub API 必须带 UA），Body：`{"ref":"main"}`。
+3. workflow 的 GH schedule 长期不活跃会被 GitHub 自动禁用，`gh workflow enable "AI DailyPulse"` 恢复。
 
 ## 小红书发布（本地、实验性）
 
@@ -51,18 +77,19 @@ cp .env.example .env   # 填 DEEPSEEK_API_KEY（必填）
 
 ## 公众号发布（手动粘贴模式，变现验证中）
 
-每期早报自动生成公众号排版 HTML（`src/wechat.py`，全内联样式，公众号编辑器直接吃）：
+每期早报自动生成公众号排版 HTML（`src/wechat.py`，全内联样式，编辑器直接吃），v3 格式：标题行、简介段、`原文链接` 可点击行分离。
 
 ```bash
 # CI 每期自动产出 output/wechat/YYYYMMDD_公众号.html（随 artifact 上传）
 # 人肉循环：下载 artifact → 浏览器打开 HTML → Ctrl+A/C → 粘贴到公众号后台 → 群发
 ```
 
-- **阶段1（现在）**：手动粘贴验证内容（目标 4 周看阅读量/流量主）。注册个人订阅号免费，满 100 粉开流量主。
-- **阶段2（账号就绪后）**：API 自动发布（草稿箱/发布接口）。**坑：微信公众平台有 IP 白名单，GitHub Actions 动态 IP 过不了**——方案是改成家里常驻机定时任务（固定家庭 IP 加白）跑发布步骤，或继续手动。
-- 定位建议：先泛 AI 科技早报跑数据，差异化用"AI+硬件/嵌入式"垂类点评（用户领域优势）。
-- 密钥（阶段2 才需要）：`WECHAT_APPID` / `WECHAT_SECRET`，老规矩进 .env / repo secrets。
+- **阶段1（现在）**：手动粘贴验证内容（目标 4 周看阅读量/流量主）。
+- **阶段2（账号就绪后）**：API 自动发布。**坑：公众平台有 IP 白名单，GitHub Actions 动态 IP 过不了**——需要家宽常驻机跑发布步骤（见仓库根 workspace 讨论记录）。另需先确认个人订阅号能否开通草稿箱 API（个人主体大概率不能认证），这是整个阶段 2 的前提。
+- 密钥（阶段 2 才需要）：`WECHAT_APPID` / `WECHAT_SECRET`。
 
 ## CI
 
-`.github/workflows/daily-digest.yml`。改动后用 `gh workflow run "AI DailyPulse"` 手动触发验证；schedule 长期不活跃会被 GitHub 自动禁用，用 `gh workflow enable` 恢复。artifact 含 `output/` 和 `data/raw_articles.json`（可下载后本地 `--process-only` 复现一期）。封面图会随每期自动提交到仓库 `covers/` 目录（保留最近 7 天），飞书/Telegram 消息里的图片链接经 `resolve_cover_urls` 替换为 jsDelivr CDN（`cdn.jsdelivr.net/gh/DanMo661/AI-DailyPulse@main/covers/...`，raw.githubusercontent 国内不可靠）。
+- `collect.yml`：UTC 06/12/18 触发，无 secret；artifact 含 `data/`（池快照，可本地 replay）。
+- `daily-digest.yml`：`workflow_dispatch`（cron-job.org）+ 兜底 cron；guard 步骤读 archive 分支防双推；归档步骤见上。
+- 手动验证：`gh workflow run collect.yml`、`gh workflow run "AI DailyPulse"`。

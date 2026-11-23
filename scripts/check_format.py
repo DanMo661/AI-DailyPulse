@@ -20,7 +20,7 @@ LINK_PREFIX = "原文链接："
 # prompt targets with slack for punctuation and LLM drift (observed real
 # production headline: 254 chars on 2026-11-18 — calibrated accordingly)
 HEADLINE_RANGE = (150, 270)
-BLURB_RANGE = (40, 125)
+BLURB_RANGE = (70, 150)
 
 PICK_RE = re.compile(r"^(\d+)\.\s\*\*(.+?)\*\*$")
 

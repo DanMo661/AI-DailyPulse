@@ -24,7 +24,7 @@
 | 14:00 | 📡 采集批次 1：每源轮询选 10 篇入池，去重不推送 | GitHub Actions cron |
 | 20:00 | 📡 采集批次 2 | GitHub Actions cron |
 | 02:00 | 📡 采集批次 3 | GitHub Actions cron |
-| **07:50** | 📡 批次 4 → 🔍 池内 ~40 篇 LLM 并行筛选 → 📝 主编定稿（**1 头条 200 字 + 4 重点 50~100 字**）→ 🖼️ 抓头条 og:image 封面 → 🚀 **推飞书** → 🗄️ 归档 | 三班错峰拉起（05:30/06:00/06:30）+ runner 内等待，首班准点执行 |
+| **07:50** | 📡 批次 4 → 🔍 池内 ~40 篇 LLM 并行筛选 → 📝 主编定稿（**1 头条 200 字 + 4 重点 100 字左右**）→ 🖼️ 抓头条 og:image 封面 → 🚀 **推飞书** → 🗄️ 归档 | 三班错峰拉起（05:30/06:00/06:30）+ runner 内等待，首班准点执行 |
 | 08:20 | 兜底重试：今日已出刊则直接跳过，绝不双推 | GitHub Actions cron |
 
 采集覆盖 AIHOT（卡兹克 925 信源 LLM 精选，官方 API）、量子位、HN、ArXiv、TechCrunch、Simon Willison、The Verge、Ars Technica、MIT Tech Review 等，按源轮询取样防单源刷屏。

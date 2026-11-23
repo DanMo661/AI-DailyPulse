@@ -25,7 +25,7 @@ Four collection batches a day build a shared news pool (no pushes); the last bat
 | 14:00 | 📡 Batch 1: round-robin across ~12 sources (AIHOT, 量子位, HN, ArXiv, TechCrunch, The Verge…), 10 articles into the pool | GitHub Actions cron |
 | 20:00 | 📡 Batch 2 | GitHub Actions cron |
 | 02:00 | 📡 Batch 3 | GitHub Actions cron |
-| **07:50** | 📡 Batch 4 → 🔍 LLM-filters the ~40-article pool in parallel → 📝 one editor call (**1 headline ~200 chars + 4 picks, 50–100 chars each**) → 🖼️ og:image cover → 🚀 **Feishu push** → 🗄️ archive | GitHub Actions (started 06:00, waits in-runner; ~1 min accuracy) |
+| **07:50** | 📡 Batch 4 → 🔍 LLM-filters the ~40-article pool in parallel → 📝 one editor call (**1 headline ~200 chars + 4 picks ~100 chars each**) → 🖼️ og:image cover → 🚀 **Feishu push** → 🗄️ archive | GitHub Actions (three staggered starts, waits in-runner) |
 | 08:20 | Fallback retry: skips silently if today's edition is already archived — never double-pushes | GitHub Actions cron |
 
 Guardrails: if ≥ 50% of the per-article filter calls fail, the edition aborts (better no issue than a broken one); a missing cover never blocks the pipeline; a failed Feishu delivery keeps the pool for the 08:20 fallback.

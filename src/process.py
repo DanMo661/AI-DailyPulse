@@ -59,8 +59,14 @@ def _fallback_digest(article: dict) -> dict:
     }
 
 
-def _digest_one(article: dict) -> tuple[dict, str]:
-    """LLM-filter one article. Returns (article, status): kept / dropped / error."""
+def _digest_one(article: dict) -> tuple[dict | None, str]:
+    """LLM-filter one article. Returns (article, status): kept / dropped / error.
+
+    A malformed article (no title/url — e.g. corrupt state sneaking in) is
+    skipped outright instead of crashing the whole filter pool.
+    """
+    if not article.get("title") or not article.get("url"):
+        return None, "malformed"
     text = f"标题: {article['title']}\n来源: {article['source']}\n摘要: {article.get('summary', '')[:1500]}"
     try:
         data = parse_json(chat(DIGEST_PROMPT, text, temperature=0.1, max_tokens=600, json_mode=True))
@@ -96,7 +102,7 @@ def process_articles(articles: list[dict]) -> tuple[list[dict], int]:
         for fut in as_completed(futures):
             i = futures[fut]
             article, status = fut.result()
-            if status == "dropped":
+            if status in ("dropped", "malformed"):
                 continue
             if status == "error":
                 errors += 1
@@ -120,7 +126,7 @@ FINALIZE_PROMPT = """你是科技新闻主编，为每日 AI/科技早报定稿�
    - headline_paragraph: 180~220字正文（硬上限240字），一句话点出新闻，再展开核心信息与影响，自然段落，不列点
 2. 另选 4 篇本日最值得关注的，按重要性从高到低排序，每篇：
    - title_cn: 中文标题（英文原文转中文，忠于原意）
-   - blurb: 50~100字简介，硬上限110字，信息量要足，写清"发生了什么+为什么重要"
+   - blurb: 100字左右的简介（90~130字，硬上限140字），写清"发生了什么+关键细节+为什么重要"，不少于三句话，不要一句话带过
    - url: 原文链接（必须引用下方候选中的 url，禁止编造）
 
 链接规则: 头条与精选的链接优先选新闻站点/公司官网/官方博客；
@@ -134,6 +140,16 @@ x.com、twitter.com、reddit.com、youtube.com 等社交平台链接只能在没
 {"headline": {"url": "...", "headline_title": "...", "headline_paragraph": "..."},
  "items": [{"url": "...", "title_cn": "...", "blurb": "..."}]}
 // items 恰好 4 条，不得包含头条，顺序即重要性降序"""
+
+
+def _fallback_blurb(a: dict) -> str:
+    """~100-char blurb assembled locally from the article's digest fields —
+    used when the editor returns fewer than 4 picks. one_liner alone is ~30
+    chars, which made every filler pick read like a stub."""
+    d = a.get("digest", {})
+    parts = [d.get("one_liner", "")] + list(d.get("key_points") or [])
+    parts = [p.strip("。；") for p in parts if p and p.strip()]
+    return "；".join(dict.fromkeys(parts)) + "。"
 
 
 def _candidate_section(articles: list[dict]) -> str:
@@ -194,7 +210,7 @@ def finalize(articles: list[dict]) -> dict:
         items.append({
             "url": url,
             "title_cn": str(it.get("title_cn") or by_url[url]["digest"].get("title_cn", ""))[:50],
-            "blurb": str(it.get("blurb") or by_url[url]["digest"].get("one_liner", ""))[:115],
+            "blurb": (str(it.get("blurb")) if it.get("blurb") else _fallback_blurb(by_url[url]))[:145],
         })
         if len(items) == 4:
             break
@@ -208,7 +224,7 @@ def finalize(articles: list[dict]) -> dict:
         items.append({
             "url": a["url"],
             "title_cn": a["digest"].get("title_cn", a["title"])[:50],
-            "blurb": a["digest"].get("one_liner", "")[:115],
+            "blurb": _fallback_blurb(a)[:145],
         })
 
     return {"headline": headline, "items": items}

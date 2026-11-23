@@ -7,8 +7,8 @@
 | 时间 | 动作 | workflow | 触发 |
 |---|---|---|---|
 | 14:00 / 20:00 / 02:00 | 采集批次 1-3：每源轮询选 10 篇入 `data/pool.json`，不推送、不耗 LLM | `collect.yml` | GH cron（延迟无妨） |
-| 07:50 | 批次 4 采集 → 池内 ~40 篇 LLM 并行筛选（`LLM_FILTER_WORKERS` 默认 2，免费档 429 严；付费 key 可调高）→ 主编定稿 → 封面 → **推飞书** → 归档 | `daily-digest.yml` | GH cron UTC 22:00 启动 + **runner 内 sleep 到 07:50**（延迟被等待步吸收） |
-| 08:20 | 兜底：主运行没起来则立即补发；推完了则飞书送达标记（`data/feishu_sent.json` 随 cache 持久化）/归档分支 guard 直接跳过，绝不双推 | `daily-digest.yml` | GH cron `20 0 * * *` |
+| 07:50 | 批次 4 采集 → 池内 ~40 篇 LLM 并行筛选（`LLM_FILTER_WORKERS` 默认 2，免费档 429 严；付费 key 可调高）→ 主编定稿 → 封面 → **推飞书** → 归档 | `daily-digest.yml` | **三班错峰** GH cron UTC 21:30/22:00/22:30 + runner 内 sleep 到 07:50（首班到达者执行，其余 guard 跳过） |
+| 08:20 | 兜底：三班全没起来则立即补发；推完了则飞书送达标记（`data/feishu_sent.json` 随 cache 持久化）/归档分支 guard 直接跳过，绝不双推 | `daily-digest.yml` | GH cron `20 0 * * *` |
 
 ## 信息源（v3）
 
@@ -58,12 +58,12 @@ cp .env.example .env   # 填 LLM_API_KEY
 - Telegram、WordPress：可选渠道，空值自动跳过。`XHS_COOKIE`（小红书）仅本地 `.env`。
 - cron-job.org 的 GitHub PAT：细粒度、仅本仓库、Actions RW——**只在 cron-job.org 后台**，不进仓库。
 
-## 定时触发（GitHub 内置等待方案，零外部服务）
+## 定时触发（三班错峰 + runner 内等待，零外部服务）
 
-- **主触发**：schedule `0 22 * * *`（UTC 22:00 = 北京 06:00）启动 runner → "Wait until 07:50 Beijing" 步 `sleep` 到 UTC 23:50 → 执行管线。GitHub cron 的启动延迟（分钟级到数小时）被等待步吸收，推送时刻精度只取决于 runner 本地时钟。public repo runner 不限时长、免费。
-- **兜底**：schedule `20 0 * * *`（北京 08:20）。主运行已推完 → guard（飞书送达标记/归档分支）直接跳过；主运行彻底没起来 → 此时已过 23:50 UTC 立即补发。
-- 两个触发共用 `concurrency: group: daily-digest` 串行化，排队者完整走 guard，绝不并发双推。
-- `workflow_dispatch`（手动 `gh workflow run`）**不等待**，立即执行——也是未来想接 cron-job.org 等外部 cron 服务的入口。
+- **主触发**：schedule UTC 21:30/22:00/22:30 三班错峰（北京 05:30/06:00/06:30）→ "Wait until 07:50 Beijing" 步 sleep 到 UTC 23:50 → 执行管线。**2026-11-19~22 实测 GH schedule 对本仓库系统性拥堵：单班连续 5 天整班丢失、兜底班迟到 1.5~3h**，故改三班冗余——一班落在窗口内即准点，等待步吸收 ≤2h 迟到；全迟到则首班立即执行（北京 ~08:00-09:00）。
+- **兜底**：schedule `20 0 * * *`（北京 08:20），三班全没起来时补发。
+- 已推完的班次由 guard（飞书送达标记 `data/feishu_sent.json` / 归档分支）直接跳过；`concurrency: group: daily-digest` 串行化所有触发，绝不并发双推。
+- **绝对精确 8:00 的唯一路径是外部 dispatch**（cron-job.org 等，需注册账号）：`workflow_dispatch` 即时触发不等待，接入时把外部任务指向它即可，代码零改动。
 - workflow schedule 长期不活跃（60 天无提交）会被 GitHub 自动禁用，`gh workflow enable "AI DailyPulse"` 恢复。
 
 ## 小红书发布（本地、实验性）

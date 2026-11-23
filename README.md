@@ -24,7 +24,7 @@
 | 14:00 | 📡 采集批次 1：每源轮询选 10 篇入池，去重不推送 | GitHub Actions cron |
 | 20:00 | 📡 采集批次 2 | GitHub Actions cron |
 | 02:00 | 📡 采集批次 3 | GitHub Actions cron |
-| **07:50** | 📡 批次 4 → 🔍 池内 ~40 篇 LLM 并行筛选 → 📝 主编定稿（**1 头条 200 字 + 4 重点 50~100 字**）→ 🖼️ 抓头条 og:image 封面 → 🚀 **推飞书** → 🗄️ 归档 | GitHub Actions（06:00 拉起 + runner 内等待，误差 ~1 分钟） |
+| **07:50** | 📡 批次 4 → 🔍 池内 ~40 篇 LLM 并行筛选 → 📝 主编定稿（**1 头条 200 字 + 4 重点 50~100 字**）→ 🖼️ 抓头条 og:image 封面 → 🚀 **推飞书** → 🗄️ 归档 | 三班错峰拉起（05:30/06:00/06:30）+ runner 内等待，首班准点执行 |
 | 08:20 | 兜底重试：今日已出刊则直接跳过，绝不双推 | GitHub Actions cron |
 
 采集覆盖 AIHOT（卡兹克 925 信源 LLM 精选，官方 API）、量子位、HN、ArXiv、TechCrunch、Simon Willison、The Verge、Ars Technica、MIT Tech Review 等，按源轮询取样防单源刷屏。
@@ -69,7 +69,7 @@
    > 曾配置过旧名 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL`？仍然兼容，可不迁移。
 
 3. 进入 **Actions** 页，启用 workflow（GitHub 默认禁用 fork 仓库的定时任务），然后 **Run workflow** 手动跑一次验证
-4. 完成。之后每天北京时间 **8 点**准时收到飞书推送——**无需任何外部定时服务**：workflow 每天北京 06:00 由 GitHub 拉起，runner 内自动等待到 07:50 精确执行（public 仓库免费不限时长；GitHub 自带 cron 的启动延迟被内置等待步吸收）
+4. 完成。之后每天早上飞书收到推送——workflow 三班错峰拉起（北京 05:30/06:00/06:30），runner 内自动等待到 **07:50** 精确执行；GitHub 定时队列偶发拥堵时会稍晚（兜底保证不空窗）。**绝对准点需求**：在 [cron-job.org](https://cron-job.org)（免费）建每天 07:50 Asia/Shanghai 任务，POST `https://api.github.com/repos/<你的用户名>/AI-DailyPulse/actions/workflows/daily-digest.yml/dispatches`，Header 带 `Authorization: Bearer <PAT>`（细粒度、仅本仓库、Actions RW）与 Body `{"ref":"main"}` 即可，代码零改动
 
 **成本**：一期约 46 次 LLM 调用（40 篇筛选 + 1 次主编 + 5 平台文案），用 DeepSeek 官方 API 每期约几分钱，接免费档模型可做到 0 成本。
 

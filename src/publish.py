@@ -123,9 +123,11 @@ def _feishu_sign(timestamp: str, secret: str) -> str:
 
 def _markdown_to_feishu_text(md: str) -> str:
     """Convert basic markdown to Feishu-friendly plain text."""
-    # drop image lines first — feishu text messages can't render them and the
-    # link rule below would otherwise mangle `![封面](url)` into `!封面 (url)`
-    md = re.sub(r'!\[[^\]]*\]\([^)]*\)\s*', '', md)
+    # cover images: feishu text messages can't render images — keep the CDN
+    # url as a labeled clickable line instead of the raw `![封面](url)` syntax
+    # (which the link rule below would mangle into `!封面 (url)`; stripping it
+    # entirely was tried and made the cover vanish from every message)
+    md = re.sub(r'!\[([^\]]*)\]\(\s*([^)]+)\)', r'🖼 \1：\2', md)
     # remove heading markers, keep text
     md = re.sub(r'^#+\s*', '', md, flags=re.MULTILINE)
     # bold: **text** -> 【text】

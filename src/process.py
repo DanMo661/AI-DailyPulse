@@ -1,4 +1,5 @@
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
@@ -16,6 +17,10 @@ from config import (
 # abort publishing when this fraction of LLM calls fails — a full API outage
 # shouldn't push a digest full of fallback placeholders to channels
 MAX_ERROR_RATIO = 0.5
+
+# 总字数硬上限（2026-11-26 用户规定）：全文正文字数（不含链接行/封面行/空白）
+# 不得超过 1000 字。prompt 与 check_format.py 共用同一口径。
+TOTAL_CHAR_LIMIT = 1000
 
 # v3 deadline: the publish run digests the whole pool (~40 articles) between
 # 07:50 and 08:00 Beijing, so per-article calls go through a small thread pool
@@ -133,6 +138,8 @@ FINALIZE_PROMPT = """你是科技新闻主编，为每日 AI/科技早报定稿�
 x.com、twitter.com、reddit.com、youtube.com 等社交平台链接只能在没有更好来源时使用。
 
 正文规则: 只基于候选摘要里已有的信息写作，不得编造具体数字、引语或原文没有的细节。
+
+总量规则: 全文总字数（标题+头条正文+4条简介，不含链接）不得超过 1000 字——严格执行上面各段字数上限，宁可精炼不可超长。
 
 头条标准：重大突破/发布、行业大事件优先；教程、软文、普通产品体验不得当头条。
 
@@ -316,6 +323,18 @@ def assemble_digest(headline: dict, items: list[dict], cover_file: str = "") -> 
         f"## 📌 其他重点\n\n"
         + "\n".join(pick_entries)
     )
+
+    # 总字数护栏（口径与 scripts/check_format.py 一致）：正文不含链接行/封面行/空白
+    body_chars = sum(
+        len(re.sub(r"\s", "", line))
+        for line in digest.splitlines()
+        if line.strip() and not line.startswith(LINK_PREFIX) and not line.startswith("![")
+    )
+    if body_chars > TOTAL_CHAR_LIMIT:
+        print(
+            f"[process] WARNING: digest is {body_chars} chars > {TOTAL_CHAR_LIMIT} limit "
+            f"— run scripts/check_format.py and tighten blurbs"
+        )
 
     return digest
 

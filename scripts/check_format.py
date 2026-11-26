@@ -22,6 +22,10 @@ LINK_PREFIX = "原文链接："
 HEADLINE_RANGE = (150, 270)
 BLURB_RANGE = (70, 150)
 
+# 总字数硬上限（2026-11-26 用户规定）：正文不含链接行/封面行/空白，与
+# src/process.py 的 TOTAL_CHAR_LIMIT 同一口径
+TOTAL_LIMIT = 1000
+
 PICK_RE = re.compile(r"^(\d+)\.\s\*\*(.+?)\*\*$")
 
 
@@ -35,6 +39,16 @@ def check(problems: list[str]):
 
     if "AI 自动生成" in text:
         _fail(problems, "found 'AI 自动生成' footer — must be removed")
+
+    # total body chars: exclude standalone link lines, cover image lines and
+    # all whitespace — plain "字数" as a human would count it
+    body_chars = sum(
+        len(re.sub(r"\s", "", l))
+        for l in lines
+        if l.strip() and not l.startswith(LINK_PREFIX) and not l.startswith("![")
+    )
+    if body_chars > TOTAL_LIMIT:
+        _fail(problems, f"digest total is {body_chars} chars, must be <= {TOTAL_LIMIT}")
 
     # headline body = non-empty lines between '### ' and the cover/link/next heading
     h3 = next((i for i, l in enumerate(lines) if l.startswith("### ")), None)
